@@ -19,7 +19,10 @@ export const metadata: Metadata = {
     description:
       "Create chord progressions, rhythms, basslines, melodies, arrangements, and complete instrumental blueprints — then preview and export your music.",
     url: "/",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "SonicBlueprint — Design Your Music. Build Your Blueprint." }],
+    images: [
+      { url: "/og-image-square.png", width: 1200, height: 1200, alt: "SonicBlueprint — Design Your Music. Build Your Blueprint." },
+      { url: "/og-image.png", width: 1200, height: 630, alt: "SonicBlueprint — Design Your Music. Build Your Blueprint." },
+    ],
   },
   twitter: {
     card: "summary_large_image",
