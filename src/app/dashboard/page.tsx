@@ -27,21 +27,6 @@ function DashboardInner() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    refresh();
-    if (params.get("new") === "1") {
-      startBlank();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtered = useMemo(
-    () => projects.filter((p) => p.meta.name.toLowerCase().includes(q.toLowerCase())),
-    [projects, q]
-  );
-  const lastId = typeof window !== "undefined" ? getLastEditedId() : null;
-  const last = projects.find((p) => p.meta.id === lastId) ?? projects[0];
-
   const openProject = (p: SonicProject) => {
     useProjectStore.getState().load(p);
     router.push(`/studio/${p.meta.id}`);
@@ -52,6 +37,25 @@ function DashboardInner() {
     await saveProject(p);
     openProject(p);
   };
+
+  useEffect(() => {
+    // Initial data load only: fetch saved projects, then honor ?new=1 deep links.
+    // Mount-time store hydration; the extra render is intentional and happens once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+    if (params.get("new") === "1") {
+      void startBlank();
+    }
+    // Runs once on mount by design; refresh/startBlank intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = useMemo(
+    () => projects.filter((p) => p.meta.name.toLowerCase().includes(q.toLowerCase())),
+    [projects, q]
+  );
+  const lastId = typeof window !== "undefined" ? getLastEditedId() : null;
+  const last = projects.find((p) => p.meta.id === lastId) ?? projects[0];
 
   const startQuick = async (id: string) => {
     const qs = QUICK_STARTS.find((x) => x.id === id);

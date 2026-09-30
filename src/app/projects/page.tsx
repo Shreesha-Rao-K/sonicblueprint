@@ -21,7 +21,9 @@ export default function ProjectsPage() {
 
   const refresh = async () => setProjects(await listProjects());
   useEffect(() => {
-    refresh();
+    // Initial data load only; the extra render is intentional and happens once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
   }, []);
 
   const open = (p: SonicProject) => {

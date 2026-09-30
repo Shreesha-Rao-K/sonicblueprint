@@ -10,6 +10,10 @@ import { cn } from "@/lib/cn";
 export function BassPanel() {
   const project = useProjectStore((s) => s.project);
   const update = useProjectStore((s) => s.update);
+  // Roving tabindex for the rhythm grid (mirrors the drum sequencer).
+  // Hooks stay above the early return so hook order never changes.
+  const [gateFocus, setGateFocus] = useState(0);
+  const gateRef = useRef<HTMLDivElement>(null);
   if (!project) return null;
 
   const gateLen = Math.max(4, Math.min(16, project.chords.beatsPerChord * 2));
@@ -18,10 +22,7 @@ export function BassPanel() {
       ? project.bass.pattern
       : Array.from({ length: gateLen }, (_, i) => i % 2 === 0);
 
-  // Roving tabindex for the rhythm grid (mirrors the drum sequencer).
-  const [gateFocus, setGateFocus] = useState(0);
   const gateFocusClamped = Math.max(0, Math.min(gate.length - 1, gateFocus));
-  const gateRef = useRef<HTMLDivElement>(null);
   const focusGateAt = (i: number) => {
     const next = Math.max(0, Math.min(gate.length - 1, i));
     setGateFocus(next);

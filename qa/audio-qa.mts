@@ -242,7 +242,7 @@ for (const [tonic, scale] of [["D", "minor"], ["C", "major"], ["A", "minor"]] as
 {
   const s = buildSongEvents(P);
   let mono = true;
-  let prevC = -1;
+  const prevC = -1;
   let prevS = -1;
   for (let t = 0; t <= s.duration; t += s.duration / 200) {
     const c = s.chordAt(t);

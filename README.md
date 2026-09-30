@@ -137,7 +137,7 @@ npm run dev        # http://localhost:3000
 ```bash
 npm run typecheck  # strict TypeScript check
 npm run lint       # ESLint
-npm test           # 67 unit + integration tests (deterministic core logic)
+npm test           # 90 unit + integration tests (deterministic core logic)
 npx tsx qa/audio-qa.mts   # 67 audio-engine regression assertions
 npm run build      # typechecks, then produces an optimized production build
 npm start          # serve the production build locally (default port 3000)
@@ -151,11 +151,11 @@ Designed for Vercel with zero configuration:
 2. Import it in Vercel (framework preset: Next.js).
 3. Deploy — `npm run build` works with no environment variables and no server functions.
 
-Optional: set `NEXT_PUBLIC_SITE_URL` to your production domain so canonical URLs, sitemap and social cards point at it (they default to `https://sonicblueprint.vercel.app`).
+Optional: set `NEXT_PUBLIC_SITE_URL` to your production domain so canonical URLs, sitemap and social cards point at it (they default to `https://sonicblueprint-studio.vercel.app`).
 
 ## Contribution instructions
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, audio-engine rules and the pull-request checklist. By contributing you agree your work is provided under the terms in [License](#license).
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, audio-engine rules and the pull-request checklist. By contributing you confirm you have the right to share your work; if an open license is adopted later, contributions may be included under it (see [License](#license)).
 
 ## Limitations
 

@@ -39,16 +39,37 @@ function tx<T>(fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   );
 }
 
-const lsGet = (id: string): SonicProject | null => {
+const lsRaw = (id: string): unknown => {
   try {
     const raw = localStorage.getItem(`sb:project:${id}`);
     if (!raw) return null;
-    const p = JSON.parse(raw);
-    return validateProject(p) ? p : null;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 };
+
+const lsGet = (id: string): SonicProject | null => {
+  const p = lsRaw(id);
+  return validateProject(p) ? p : null;
+};
+
+/** Merge IndexedDB + localStorage reads into one consistent project list.
+ * Pure function so the merge rules are unit-testable:
+ * - malformed entries are dropped (never crash, never surface junk)
+ * - duplicate IDs resolve to the IndexedDB copy (first list wins)
+ * - localStorage-only projects are always preserved
+ * - result is sorted newest-first by updatedAt
+ */
+export function mergeProjectLists(idbItems: unknown[], lsItems: unknown[]): SonicProject[] {
+  const byId = new Map<string, SonicProject>();
+  for (const item of [...idbItems, ...lsItems]) {
+    if (!validateProject(item)) continue;
+    if (item.meta.id.length === 0 || byId.has(item.meta.id)) continue;
+    byId.set(item.meta.id, item);
+  }
+  return [...byId.values()].sort((a, b) => (a.meta.updatedAt < b.meta.updatedAt ? 1 : -1));
+}
 
 export async function saveProject(p: SonicProject): Promise<void> {
   try {
@@ -81,27 +102,28 @@ export async function loadProject(id: string): Promise<SonicProject | null> {
 }
 
 export async function listProjects(): Promise<SonicProject[]> {
+  // IndexedDB first (preferred on duplicates); a failure simply yields an
+  // empty IDB list so localStorage-only projects stay visible regardless.
+  let idbItems: unknown[] = [];
   try {
-    const all = await tx<SonicProject[]>((s) => s.getAll() as unknown as IDBRequest<SonicProject[]>);
-    if (Array.isArray(all) && all.length > 0)
-      return all.filter(validateProject).sort((a, b) => (a.meta.updatedAt < b.meta.updatedAt ? 1 : -1));
+    const all = await tx<unknown[]>((s) => s.getAll() as unknown as IDBRequest<unknown[]>);
+    if (Array.isArray(all)) idbItems = all;
   } catch {
-    /* fall through */
+    /* fall through with an empty IDB list */
   }
-  // localStorage fallback scan
-  const out: SonicProject[] = [];
+  // localStorage fallback scan (fills gaps, never overwrites IDB copies).
+  const lsItems: unknown[] = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k?.startsWith("sb:project:")) {
-        const p = lsGet(k.replace("sb:project:", ""));
-        if (p) out.push(p);
+        lsItems.push(lsRaw(k.slice("sb:project:".length)));
       }
     }
   } catch {
     /* ignore */
   }
-  return out.sort((a, b) => (a.meta.updatedAt < b.meta.updatedAt ? 1 : -1));
+  return mergeProjectLists(idbItems, lsItems);
 }
 
 export async function deleteProject(id: string): Promise<void> {

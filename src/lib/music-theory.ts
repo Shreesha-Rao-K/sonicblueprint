@@ -262,7 +262,6 @@ export function generateMelody(
   density = 0.6
 ): MelodyNote[] {
   const rand = seededRandom(seed);
-  const pcs = scalePcs(tonicPc, scale);
   const baseOct = 4;
   const baseMidi = (baseOct + 1) * 12 + tonicPc;
   const scaleMidis: number[] = [];

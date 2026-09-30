@@ -6,6 +6,7 @@ import { getCases } from "./helpers.js";
 import "./music-theory.test.js";
 import "./project-schema.test.js";
 import "./presets.test.js";
+import "./storage.test.js";
 import "./song-events.test.js";
 import "./layers.test.js";
 import "./security.test.js";

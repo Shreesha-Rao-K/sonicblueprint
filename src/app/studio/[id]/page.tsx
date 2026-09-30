@@ -19,7 +19,8 @@ import { Button, TextInput } from "@/components/ui";
 import { StudioGuide } from "@/components/StudioGuide";
 import { LayerToggles } from "@/components/LayerToggles";
 import { PanelErrorBoundary } from "@/components/ErrorBoundary";
-import { useProjectStore } from "@/store/project-store";
+import { useProjectStore, useTransportStore } from "@/store/project-store";
+import { getEngine } from "@/lib/audio-engine";
 import { loadProject } from "@/lib/storage";
 
 export default function StudioPage({ params }: { params: Promise<{ id: string }> }) {
@@ -67,6 +68,8 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     let live = true;
+    // Never let audio from a previous project (or page) keep playing inaudibly.
+    getEngine().stop(false);
     (async () => {
       const current = useProjectStore.getState().project;
       if (current && current.meta.id === id) {
@@ -84,6 +87,15 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
     })();
     return () => {
       live = false;
+      // Unmounting the studio must silence the scheduler: no ghost audio.
+      getEngine().stop(false);
+      // Drop stale playback state so a later visit can't resume a dead song.
+      useTransportStore.getState().set({
+        playing: false,
+        positionSec: 0,
+        chordIndex: 0,
+        sectionIndex: 0,
+      });
     };
   }, [id, router]);
 
