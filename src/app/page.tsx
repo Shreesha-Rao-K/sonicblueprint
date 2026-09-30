@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     absolute: "SonicBlueprint — Music Composition Tool, Chord Progression Builder & Instrumental Maker",
   },
   description:
-    "Design instrumental music visually: build chord progressions, create drum patterns, arrange song sections and hear every edit instantly. Export MP3 recordings, editable MIDI notes and PDF music blueprints — free, in your browser.",
+    "Create chord progressions, rhythms, basslines, melodies, arrangements, and complete instrumental blueprints — then preview and export your music.",
   alternates: {
     canonical: "/",
   },
@@ -15,17 +15,18 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "SonicBlueprint",
     locale: "en_US",
-    title: "SonicBlueprint — Design the music. Build the blueprint.",
+    title: "SonicBlueprint — Design Your Music. Build Your Blueprint.",
     description:
-      "A free browser-based music composition tool: chord progression builder, drum pattern builder and arrangement studio with MP3, MIDI and PDF export.",
+      "Create chord progressions, rhythms, basslines, melodies, arrangements, and complete instrumental blueprints — then preview and export your music.",
     url: "/",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "SonicBlueprint — Design Your Music. Build Your Blueprint." }],
   },
   twitter: {
-    title: "SonicBlueprint — Design the music. Build the blueprint.",
+    card: "summary_large_image",
+    title: "SonicBlueprint — Design Your Music. Build Your Blueprint.",
     description:
-      "Build chord progressions, design drum patterns and arrange songs visually — then export MP3, MIDI and PDF. Free in your browser.",
-    images: ["/opengraph-image"],
+      "Create chord progressions, rhythms, basslines, melodies, arrangements, and complete instrumental blueprints — then preview and export your music.",
+    images: ["/og-image.png"],
   },
 };
 

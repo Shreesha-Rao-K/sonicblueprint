@@ -1,6 +1,33 @@
 // ── Project schema v1: versioned JSON, defaults, validation ──
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+export type LayerId = "chords" | "drums" | "bass" | "melody";
+
+/** Per-layer participation switches. Disabling a layer removes it from
+ * playback and exports without touching its musical configuration. */
+export interface LayerState {
+  chords: boolean;
+  drums: boolean;
+  bass: boolean;
+  melody: boolean;
+}
+
+export const LAYER_IDS: LayerId[] = ["chords", "drums", "bass", "melody"];
+
+export function defaultLayers(): LayerState {
+  return { chords: true, drums: true, bass: true, melody: true };
+}
+
+/** Single source of truth for layer state: merges stored flags over ON defaults. */
+export function getLayers(p: SonicProject): LayerState {
+  const stored = (p.layers ?? {}) as Partial<Record<LayerId, unknown>>;
+  const out = defaultLayers();
+  for (const id of LAYER_IDS) {
+    if (typeof stored[id] === "boolean") out[id] = stored[id] as boolean;
+  }
+  return out;
+}
 
 export type TimeSignature = "4/4" | "3/4" | "6/8" | "12/8";
 export type ScaleKind = "major" | "minor";
@@ -95,6 +122,17 @@ export interface SonicProject {
   instruments: InstrumentSlot[];
   arrangement: ArrangementSection[];
   originality: OriginalityFlags;
+  layers: LayerState;
+}
+
+/** Bring any stored project (v1 or v2) up to the current schema.
+ * v1 projects predate layer toggles, so every layer defaults ON. */
+export function normalizeProject(p: SonicProject): SonicProject {
+  return {
+    ...p,
+    schemaVersion: SCHEMA_VERSION,
+    layers: getLayers(p),
+  };
 }
 
 export function uid(prefix = "id"): string {
@@ -176,6 +214,7 @@ export function createProject(name = "Untitled Blueprint", seed?: Partial<SonicP
     melodyStyle: seed?.melodyStyle ?? "gentle",
     instruments: seed?.instruments ?? defaultInstruments(),
     arrangement: seed?.arrangement ?? defaultArrangement(),
+    layers: { ...defaultLayers(), ...(seed?.layers ?? {}) },
     originality: {
       usesImportedRecording: false,
       usesCommercialSample: false,
@@ -209,13 +248,18 @@ function isFiniteNumber(v: unknown): v is number {
 
 export function validateProject(p: unknown): p is SonicProject {
   if (!isRecord(p)) return false;
+  // v1 projects predate layer toggles and are migrated on load.
+  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
   // typeof null === "object", so null sections must be rejected explicitly.
-  if (p["schemaVersion"] !== 1) return false;
   const meta = p["meta"];
   const config = p["config"];
   if (!isRecord(meta) || typeof meta["id"] !== "string") return false;
   if (typeof meta["name"] !== "string") return false;
   if (!isRecord(config)) return false;
+  // Layer flags are optional (v1 predates them) but must be an object when present.
+  if (p["layers"] !== undefined && (!isRecord(p["layers"]) || Array.isArray(p["layers"]))) {
+    return false;
+  }
 
   // Structural sections must exist with sane bounds. Anything absurd
   // (gigantic arrays, unbounded loops) is rejected rather than rendered,

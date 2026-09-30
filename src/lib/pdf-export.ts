@@ -1,5 +1,6 @@
 // Professional PDF Music Blueprint via jsPDF (loaded on demand to keep initial load small).
 import type { SonicProject } from "./project-schema";
+import { LAYER_IDS, getLayers, type LayerId } from "./project-schema";
 import { chordLongName } from "./music-theory";
 import { checkOriginality, ORIGINALITY_DISCLAIMER } from "./originality";
 import { quarterBeatsPerBar } from "./audio-engine";
@@ -87,8 +88,32 @@ export async function exportPdf(p: SonicProject): Promise<Blob> {
   kv("Dynamics", `${p.config.dynamics} / 10`);
   ensure(40);
 
-  title("Chord progression");
-  body(
+  title("Musical layers");
+  {
+    const layers = getLayers(p);
+    const names: Record<LayerId, string> = {
+      chords: "Chords",
+      drums: "Drums",
+      bass: "Bass",
+      melody: "Melody",
+    };
+    for (const id of LAYER_IDS) {
+      const on = layers[id];
+      ensure(20);
+      doc.setFont("helvetica", on ? "bold" : "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(on ? 20 : 130, on ? 20 : 130, on ? 30 : 150);
+      doc.text(
+        `${on ? "●" : "○"} ${names[id]} — ${on ? "included" : "muted (settings kept)"}`,
+        M,
+        y
+      );
+      y += 15;
+    }
+    y += 4;
+  }
+
+  title("Chord progression");  body(
     p.chords.chords.map((c) => c.replace("b", "♭")).join("  →  ") +
       `\n${p.chords.chords.map(chordLongName).join("  →  ")}` +
       `\n${p.chords.beatsPerChord} beats per chord  •  octave ${p.chords.octave}`

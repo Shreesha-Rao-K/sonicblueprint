@@ -17,7 +17,7 @@ suite("project creation");
 
 test("defaults describe a playable D minor song", () => {
   const p = createProject("Track 01");
-  eq(p.schemaVersion, 1);
+  eq(p.schemaVersion, SCHEMA_VERSION);
   eq(p.config.bpm, 100);
   eq(p.config.keyTonic, "D");
   eq(p.config.scale, "minor");
@@ -83,9 +83,13 @@ test("garbage fails validation", () => {
   ok(!validateProject({ schemaVersion: 1, meta: {}, config: null }));
 });
 
-test("future schema versions are rejected (migration contract)", () => {
+test("unknown schema versions are rejected (migration contract)", () => {
   const p = createProject("v") as unknown as Record<string, unknown>;
-  ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 2 }));
+  ok(validateProject(p), "current v2 validates");
+  ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 99 }));
+  const asV1 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 1 };
+  delete (asV1 as Record<string, unknown>)["layers"];
+  ok(validateProject(asV1), "v1 without layers still loads");
   ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 0 }));
 });
 

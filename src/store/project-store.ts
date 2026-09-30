@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import type { SonicProject } from "@/lib/project-schema";
-import { createProject, touchProject } from "@/lib/project-schema";
+import { createProject, normalizeProject, touchProject } from "@/lib/project-schema";
 import { saveProject as persist } from "@/lib/storage";
 
 interface ProjectState {
@@ -31,7 +31,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   lastSavedAt: null,
   past: [],
   future: [],
-  load: (p) => set({ project: p, dirty: false, past: [], future: [] }),
+  load: (p) => set({ project: normalizeProject(p), dirty: false, past: [], future: [] }),
   createNew: (name, seed) => set({
     project: createProject(name ?? "Untitled Blueprint", seed),
     dirty: true,

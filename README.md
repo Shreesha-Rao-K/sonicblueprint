@@ -18,6 +18,7 @@ SonicBlueprint is a free, browser-based music composition and instrumental bluep
 - Visual drum step sequencer (20 patterns, swing, punch) with full keyboard operation
 - Chord-following bass (8 styles + drawable rhythm), regenerable tunes (6 styles)
 - 12 layerable instrument groups with mixer controls
+- Mix Layers switches — Chords, Drums, Bass and Melody toggle on/off without losing settings; muted layers are excluded from preview, MP3 and MIDI, and marked muted in the PDF
 - Song-structure timeline with per-part intensity, playable from any point
 - Live procedural preview, undo/redo, and an unsaved-changes guard so work is never lost silently
 - One-click MP3, MIDI, PDF and backup-file export
@@ -75,13 +76,14 @@ Heavy encoder libraries load on demand, never on page open.
 
 ## Project persistence
 
-Projects are versioned JSON (`schemaVersion: 1`, see format below) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
+Projects are versioned JSON (`schemaVersion: 2`, see format below; v1 files load with every layer switched on) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "meta": { "id": "...", "name": "...", "createdAt": "...", "updatedAt": "...", "version": 1 },
   "config": { "bpm": 100, "keyTonic": "D", "scale": "minor", "timeSignature": "4/4", "mood": "Emotional", "energy": 6, "dynamics": 6 },
+  "layers": { "chords": true, "drums": true, "bass": true, "melody": true },
   "chords": { "progressionId": "...", "chords": ["Dm", "Bb", "F", "C"], "beatsPerChord": 4, "octave": 3 },
   "drums": { "patternId": "...", "steps": 16, "grid": { "kick": [...], "...": [...] }, "swing": 0, "velocity": 0.9 },
   "bass": { "styleId": "root", "octave": 1, "volume": 0.85, "pattern": [...] },

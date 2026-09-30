@@ -17,6 +17,7 @@ import { OriginalityPanel } from "@/components/OriginalityPanel";
 import { PianoPreview } from "@/components/PianoPreview";
 import { Button, TextInput } from "@/components/ui";
 import { StudioGuide } from "@/components/StudioGuide";
+import { LayerToggles } from "@/components/LayerToggles";
 import { PanelErrorBoundary } from "@/components/ErrorBoundary";
 import { useProjectStore } from "@/store/project-store";
 import { loadProject } from "@/lib/storage";
@@ -165,6 +166,7 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
 
         <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
           <div className="min-w-0 space-y-4">
+            <PanelErrorBoundary label="Mix layers"><LayerToggles /></PanelErrorBoundary>
             <PanelErrorBoundary label="Chord editor"><ChordEditor /></PanelErrorBoundary>
             <PanelErrorBoundary label="Harmony preview"><PianoPreview /></PanelErrorBoundary>
             <PanelErrorBoundary label="Drum sequencer"><DrumSequencer /></PanelErrorBoundary>

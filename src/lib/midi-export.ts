@@ -1,12 +1,14 @@
 // MIDI export — meaningful musical data: chords, bass, drums, melody, tempo, time sig.
 // The MIDI library loads on demand so exporting never slows down opening the studio.
 import type { SonicProject } from "./project-schema";
+import { getLayers } from "./project-schema";
 import { chordMidiNotes, generateMelody, rootToPc } from "./music-theory";
 import { MELODY_STYLES } from "@/data/styles";
 import { quarterBeatsPerBar } from "./audio-engine";
 
 export async function exportMidi(p: SonicProject): Promise<Blob> {
   const { Midi } = await import("@tonejs/midi");
+  const layers = getLayers(p);
   const midi = new Midi();
   midi.header.setTempo(Number.isFinite(p.config.bpm) ? p.config.bpm : 100);
   const [num, den] = String(p.config.timeSignature ?? "4/4").split("/").map(Number);
@@ -49,27 +51,35 @@ export async function exportMidi(p: SonicProject): Promise<Blob> {
         const ci = Math.floor((bar * qpb + c * beatsPerChordQ) / beatsPerChordQ + secIdx * 0) % chords.length;
         const idx = ((ci % chords.length) + chords.length) % chords.length;
         const sym = chords[idx];
-        for (const m of chordMidiNotes(sym, p.chords.octave)) {
-          chordsTrack.addNote({ midi: m, time: start, duration: dur * 0.95, velocity: 0.7 });
+        if (layers.chords) {
+          for (const m of chordMidiNotes(sym, p.chords.octave)) {
+            chordsTrack.addNote({ midi: m, time: start, duration: dur * 0.95, velocity: 0.7 });
+          }
         }
-        const root = chordMidiNotes(sym, 1)[0] - 12 + p.bass.octave * 12;
-        bassTrack.addNote({ midi: root, time: start, duration: Math.min(dur * 0.95, spq * 2), velocity: 0.85 });
+        if (layers.bass) {
+          const root = chordMidiNotes(sym, 1)[0] - 12 + p.bass.octave * 12;
+          bassTrack.addNote({ midi: root, time: start, duration: Math.min(dur * 0.95, spq * 2), velocity: 0.85 });
+        }
         // melody slice
-        const mel = generateMelody([sym], beatsPerChordQ, tonicPc, scaleKind, `${p.originality.melodySeed}:${secIdx}:${idx}`, density);
-        for (const n of mel) {
-          melodyTrack.addNote({ midi: n.midi, time: start + n.startBeat * spq, duration: n.durBeats * spq * 0.9, velocity: 0.65 });
+        if (layers.melody) {
+          const mel = generateMelody([sym], beatsPerChordQ, tonicPc, scaleKind, `${p.originality.melodySeed}:${secIdx}:${idx}`, density);
+          for (const n of mel) {
+            melodyTrack.addNote({ midi: n.midi, time: start + n.startBeat * spq, duration: n.durBeats * spq * 0.9, velocity: 0.65 });
+          }
         }
       }
       // drums
       const steps = p.drums.steps;
       const barDur = qpb * spq;
       const stepDur = barDur / steps;
-      for (let s = 0; s < steps; s++) {
-        const tt = barStart + s * stepDur;
-        for (const row of Object.keys(p.drums.grid) as (keyof typeof p.drums.grid)[]) {
-          const col = p.drums.grid[row];
-          if (col[s % col.length] && DRUM_MAP[row] !== undefined) {
-            drumsTrack.addNote({ midi: DRUM_MAP[row], time: tt, duration: 0.12, velocity: 0.85 });
+      if (layers.drums) {
+        for (let s = 0; s < steps; s++) {
+          const tt = barStart + s * stepDur;
+          for (const row of Object.keys(p.drums.grid) as (keyof typeof p.drums.grid)[]) {
+            const col = p.drums.grid[row];
+            if (col[s % col.length] && DRUM_MAP[row] !== undefined) {
+              drumsTrack.addNote({ midi: DRUM_MAP[row], time: tt, duration: 0.12, velocity: 0.85 });
+            }
           }
         }
       }

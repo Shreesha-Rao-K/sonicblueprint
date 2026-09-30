@@ -7,6 +7,7 @@ import "./music-theory.test.js";
 import "./project-schema.test.js";
 import "./presets.test.js";
 import "./song-events.test.js";
+import "./layers.test.js";
 import "./security.test.js";
 import "./exports.test.js";
 

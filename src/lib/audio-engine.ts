@@ -4,6 +4,7 @@
 
 import type { SonicProject } from "./project-schema";
 import { chordMidiNotes, generateMelody, midiToFreq, rootToPc } from "./music-theory";
+import { getLayers } from "./project-schema";
 import { MELODY_STYLES } from "@/data/styles";
 
 export interface EngineStatus {
@@ -102,6 +103,8 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   const rawChords = Array.isArray(p.chords?.chords) && p.chords.chords.length > 0 ? p.chords.chords : ["Am"];
   const chords = rawChords.slice(0, 64).map((c) => (typeof c === "string" ? c : "Am"));
   const beatsPerChordQ = Math.max(1, Math.min(16, Math.round(p.chords?.beatsPerChord ?? 4)));
+  // Layer participation: one source of truth for preview, MP3, MIDI and PDF.
+  const layers = getLayers(p);
 
   const slotsOf = (group: string) =>
     (Array.isArray(p.instruments) ? p.instruments : []).filter((i) => i.group === group && i.enabled);
@@ -148,7 +151,9 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
 
         const midis = chordMidiNotes(sym, p.chords.octave);
 
-        // harmony instruments (every enabled slot sounds — simultaneous layers)
+        // harmony instruments (every enabled slot sounds — simultaneous layers).
+        // Skipped entirely when the chords layer is OFF (settings are kept).
+        if (layers.chords) {
         for (const s of allowedSlots(secIdx, "piano")) {
           if (s.patternVariant === "broken") {
             midis.forEach((m, k) => {
@@ -203,8 +208,11 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
           notes.push({ time: start, midi: midis[0] + 24 + s.octave * 12, dur, synth: "atmos", vol: s.volume * 0.25, pan: s.pan });
           notes.push({ time: start, midi: midis[0] + 31 + s.octave * 12, dur, synth: "atmos", vol: s.volume * 0.18, pan: -s.pan });
         }
+        }
 
-        // bass (every enabled bass slot follows the chord root)
+        // bass (every enabled bass slot follows the chord root).
+        // Skipped entirely when the bass layer is OFF (settings are kept).
+        if (layers.bass) {
         const bassStyle = p.bass?.styleId ?? "root";
         const bassOct = Number.isFinite(p.bass?.octave) ? (p.bass.octave as number) : 1;
         const bassVol = Number.isFinite(p.bass?.volume) ? (p.bass.volume as number) : 0.85;
@@ -233,8 +241,11 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
             notes.push({ time: start, midi: rootMidi, dur: spq * 1.8, synth: "bass", vol: bv, pan: bassSlot.pan });
           }
         }
+        } // layers.bass
 
-        // melody leads — generated per chord slot
+        // melody leads — generated per chord slot.
+        // Skipped entirely when the melody layer is OFF (settings are kept).
+        if (layers.melody) {
         const leads = (Array.isArray(p.instruments) ? p.instruments : []).filter(
           (i) => (i.group === "plucks" || i.group === "synth") && i.enabled && i.role === "melody"
         ).filter((l) => {
@@ -249,9 +260,11 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
             }
           }
         }
+        } // layers.melody
       }
 
-      // drums for this bar
+      // drums for this bar. Skipped entirely when the drums layer is OFF.
+      if (layers.drums) {
       const drumCfg = p.drums ?? {};
       const steps = Number.isFinite(drumCfg.steps)
         ? Math.max(1, Math.min(64, Math.round(drumCfg.steps as number)))
@@ -274,6 +287,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
           }
         }
       }
+      } // layers.drums
       absBar++;
     }
     t += secBars * barDur;
