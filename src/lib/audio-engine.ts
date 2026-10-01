@@ -106,13 +106,46 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   // Layer participation: one source of truth for preview, MP3, MIDI and PDF.
   const layers = getLayers(p);
 
+  // Per-build caches: slot membership and chord spellings are loop-invariant
+  // per (section, group) and (symbol, octave), so memoize them instead of
+  // re-filtering/re-parsing on every chord slot (slots scale with bars).
   const slotsOf = (group: string) =>
     (Array.isArray(p.instruments) ? p.instruments : []).filter((i) => i.group === group && i.enabled);
+  const allowedCache = new Map<string, typeof p.instruments>();
   const allowedSlots = (secIdx: number, group: string) => {
+    const key = `${secIdx}:${group}`;
+    const hit = allowedCache.get(key);
+    if (hit) return hit;
     const slots = slotsOf(group);
     const sec = sections[secIdx];
-    if (!sec || !Array.isArray(sec.instruments) || sec.instruments.length === 0) return slots;
-    return slots.filter((s) => sec.instruments.includes(s.id));
+    const out = !sec || !Array.isArray(sec.instruments) || sec.instruments.length === 0
+      ? slots
+      : slots.filter((s) => sec.instruments.includes(s.id));
+    allowedCache.set(key, out);
+    return out;
+  };
+  const midiCache = new Map<string, number[]>();
+  const leadCache = new Map<number, typeof p.instruments>();
+  // Drum configuration is song-global: resolve rows once instead of per bar.
+  const drumCfg = p.drums ?? {};
+  const drumSteps = Number.isFinite(drumCfg.steps)
+    ? Math.max(1, Math.min(64, Math.round(drumCfg.steps as number)))
+    : 16;
+  const drumStepDur = barDur / drumSteps;
+  const drumSwing = Number.isFinite(drumCfg.swing) ? Math.max(0, Math.min(0.9, drumCfg.swing as number)) : 0;
+  const drumGroove = Number.isFinite(drumCfg.velocity) ? Math.max(0.1, Math.min(1, drumCfg.velocity as number)) : 0.9;
+  const drumGrid = (drumCfg.grid ?? {}) as Record<string, unknown>;
+  const drumRows = Object.keys(drumGrid).map((row) => {
+    const col = drumGrid[row];
+    return Array.isArray(col) && col.length > 0 ? { row, col, len: col.length } : null;
+  }).filter((r): r is { row: string; col: unknown[]; len: number } => r !== null);
+  const chordMidis = (sym: string, octave: number): number[] => {
+    const key = `${sym}@${octave}`;
+    const hit = midiCache.get(key);
+    if (hit) return hit;
+    const out = chordMidiNotes(sym, octave);
+    midiCache.set(key, out);
+    return out;
   };
 
   const notes: NoteEvent[] = [];
@@ -149,7 +182,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         const dur = beatsPerChordQ * spq * 0.95;
         chordMarks.push({ start, idx: ci });
 
-        const midis = chordMidiNotes(sym, p.chords.octave);
+        const midis = chordMidis(sym, p.chords.octave);
 
         // harmony instruments (every enabled slot sounds — simultaneous layers).
         // Skipped entirely when the chords layer is OFF (settings are kept).
@@ -216,8 +249,9 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         const bassStyle = p.bass?.styleId ?? "root";
         const bassOct = Number.isFinite(p.bass?.octave) ? (p.bass.octave as number) : 1;
         const bassVol = Number.isFinite(p.bass?.volume) ? (p.bass.volume as number) : 0.85;
+        // Loop-invariant per chord slot: parse once, not once per bass slot.
+        const rootMidi = chordMidis(sym, 1)[0] + bassOct * 12 - 12;
         for (const bassSlot of allowedSlots(secIdx, "bass")) {
-          const rootMidi = chordMidiNotes(sym, 1)[0] + bassOct * 12 - 12;
           const bv = (bassSlot.volume * bassVol) * energyFactor;
           const st = bassStyle;
           if (st === "sustained" || st === "sub") {
@@ -246,12 +280,17 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         // melody leads — generated per chord slot.
         // Skipped entirely when the melody layer is OFF (settings are kept).
         if (layers.melody) {
-        const leads = (Array.isArray(p.instruments) ? p.instruments : []).filter(
-          (i) => (i.group === "plucks" || i.group === "synth") && i.enabled && i.role === "melody"
-        ).filter((l) => {
-          const sec = sections[secIdx];
-          return !sec || !Array.isArray(sec.instruments) || sec.instruments.length === 0 || sec.instruments.includes(l.id);
-        });
+        // Section-invariant: compute once per section, not once per slot.
+        let leads = leadCache.get(secIdx);
+        if (!leads) {
+          leads = (Array.isArray(p.instruments) ? p.instruments : []).filter(
+            (i) => (i.group === "plucks" || i.group === "synth") && i.enabled && i.role === "melody"
+          ).filter((l) => {
+            const sec = sections[secIdx];
+            return !sec || !Array.isArray(sec.instruments) || sec.instruments.length === 0 || sec.instruments.includes(l.id);
+          });
+          leadCache.set(secIdx, leads);
+        }
         if (leads.length > 0 && energy >= 3) {
           const mel = generateMelody([sym], beatsPerChordQ, tonicPc, scaleKind, `${p.originality?.melodySeed ?? "x"}:${secIdx}:${ci}`, melodyDensity * (0.5 + energy / 14));
           for (const lead of leads) {
@@ -265,25 +304,14 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
 
       // drums for this bar. Skipped entirely when the drums layer is OFF.
       if (layers.drums) {
-      const drumCfg = p.drums ?? {};
-      const steps = Number.isFinite(drumCfg.steps)
-        ? Math.max(1, Math.min(64, Math.round(drumCfg.steps as number)))
-        : 16;
-      const stepDur = barDur / steps;
-      const swing = Number.isFinite(drumCfg.swing) ? Math.max(0, Math.min(0.9, drumCfg.swing as number)) : 0;
-      const groove = Number.isFinite(drumCfg.velocity) ? Math.max(0.1, Math.min(1, drumCfg.velocity as number)) : 0.9;
-      const grid = (drumCfg.grid ?? {}) as Record<string, unknown>;
-      const rows = Object.keys(grid);
-      for (let s = 0; s < steps; s++) {
-        let tt = barStart + s * stepDur;
-        if (swing > 0 && s % 2 === 1) tt += stepDur * swing * 0.5;
-        for (const row of rows) {
-          const col = grid[row];
-          if (!Array.isArray(col) || col.length === 0) continue;
-          if (col[s % col.length]) {
+      for (let s = 0; s < drumSteps; s++) {
+        let tt = barStart + s * drumStepDur;
+        if (drumSwing > 0 && s % 2 === 1) tt += drumStepDur * drumSwing * 0.5;
+        for (const { row, col, len } of drumRows) {
+          if (col[s % len]) {
             // scale drums by section energy: fewer hats in low energy
             if (energy <= 3 && (row === "openhat" || row === "tom")) continue;
-            drums.push({ time: tt, row, vol: groove });
+            drums.push({ time: tt, row, vol: drumGroove });
           }
         }
       }
@@ -356,6 +384,35 @@ function firstIndexAtOrAfter(
 
 type OscType = OscillatorType;
 
+// ── Startup failure model ──
+// The engine never shows UI; it reports failures as AudioStartError with a
+// stable kind so the transport bar can show one friendly line. Technical
+// detail stays in console output at the call site.
+
+export type AudioFailureKind = "unavailable" | "blocked" | "failed";
+
+export class AudioStartError extends Error {
+  readonly kind: AudioFailureKind;
+  constructor(kind: AudioFailureKind, detail?: string) {
+    super(detail ?? kind);
+    this.name = "AudioStartError";
+    this.kind = kind;
+  }
+}
+
+/** Friendly, non-technical copy for each failure kind. Pure and unit-tested. */
+export function describeAudioError(err: unknown): string {
+  const kind = err instanceof AudioStartError ? err.kind : "failed";
+  switch (kind) {
+    case "unavailable":
+      return "Sound isn't available in this browser. Try a recent Chrome, Edge, Firefox or Safari — your song is safe.";
+    case "blocked":
+      return "Your browser blocked sound. Press Play again to allow it — your song is safe.";
+    case "failed":
+      return "Sound couldn't start. Your song is safe — try again.";
+  }
+}
+
 export class WebAudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -378,6 +435,9 @@ export class WebAudioEngine {
   private onTick: ((s: EngineStatus) => void) | null = null;
   private volume = 0.8;
   private muted = false;
+  // Start token: every play()/stop() bumps it. A play that loses a race
+  // (rapid taps) aborts after its awaits instead of starting a ghost timer.
+  private startToken = 0;
 
   get analyserNode(): AnalyserNode | null {
     return this.analyser;
@@ -426,8 +486,25 @@ export class WebAudioEngine {
   }
 
   async play(p: SonicProject, opts: PlayOptions = {}): Promise<void> {
-    this.ensure();
-    await this.ctx!.resume();
+    const token = ++this.startToken;
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensure();
+    } catch (e) {
+      throw new AudioStartError("unavailable", e instanceof Error ? e.message : undefined);
+    }
+    try {
+      await ctx.resume();
+    } catch (e) {
+      throw new AudioStartError("failed", e instanceof Error ? e.message : undefined);
+    }
+    // Lost a rapid-tap race, or stopped while resuming: never start a timer.
+    if (token !== this.startToken) return;
+    // Autoplay policy / OS interruption can leave the context suspended even
+    // after resume(): report it instead of "playing" in silence.
+    if (ctx.state !== "running") {
+      throw new AudioStartError("blocked");
+    }
     this.stop(false);
     this.project = p;
     this.loop = opts.loop ?? false;
@@ -529,7 +606,14 @@ export class WebAudioEngine {
 
   async resume() {
     if (!this.project || !this.song || !this.ctx) return;
-    await this.ctx.resume();
+    try {
+      await this.ctx.resume();
+    } catch (e) {
+      throw new AudioStartError("failed", e instanceof Error ? e.message : undefined);
+    }
+    if (this.ctx.state !== "running") {
+      throw new AudioStartError("blocked");
+    }
     const off = this.startOffset;
     // Re-enter the absolute event lists just ahead of the pause point so the
     // current chord re-articulates and masks the gap. Never mutate the lists.
@@ -542,6 +626,8 @@ export class WebAudioEngine {
   }
 
   stop(notify = true) {
+    // Invalidate any play() still awaiting resume() so it can't start late.
+    this.startToken++;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (notify && this.onTick && this.song) {
@@ -550,10 +636,18 @@ export class WebAudioEngine {
     this.startOffset = 0;
   }
 
-  /** One-shot chord preview (no scheduler). */
+  /** One-shot chord preview (no scheduler). Failures are preview-only:
+   * logged for debugging, never surfaced — the transport owns error UI. */
   async previewChord(symbol: string, octave = 3): Promise<void> {
-    const ctx = this.ensure();
-    await ctx.resume();
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensure();
+      await ctx.resume();
+    } catch (e) {
+      console.warn("[SonicBlueprint:audio] preview unavailable", e);
+      return;
+    }
+    if (ctx.state !== "running") return;
     const midis = chordMidiNotes(symbol, octave);
     const t = ctx.currentTime + 0.02;
     midis.forEach((m) => this.voice("piano", m, t, 1.4, 0.5, 0));
@@ -563,8 +657,15 @@ export class WebAudioEngine {
 
   /** One-bar drum preview (same timing + swing as the arrangement). */
   async previewDrums(p: SonicProject): Promise<void> {
-    const ctx = this.ensure();
-    await ctx.resume();
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensure();
+      await ctx.resume();
+    } catch (e) {
+      console.warn("[SonicBlueprint:audio] preview unavailable", e);
+      return;
+    }
+    if (ctx.state !== "running") return;
     const bpmRaw = p.config?.bpm;
     const bpm = Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100;
     const spq = 60 / bpm;
@@ -1092,6 +1193,11 @@ export async function renderToAudioBuffer(
   const outR = new Float32Array(totalFrames);
   const TAIL_SEC = 2.5; // capture ring-outs of notes starting near a boundary
 
+  // Single sort + index ranges: the old per-segment full-array filter was
+  // O(segments × events). Partitioning reproduces the exact same windows.
+  const sortedNotes = [...song.notes].sort((a, b) => a.time - b.time);
+  const sortedDrums = [...song.drums].sort((a, b) => a.time - b.time);
+
   for (let s = 0; s < numSeg; s++) {
     const segStart = s * SEG_SEC;
     const segDur = Math.min(SEG_SEC, totalSec - segStart);
@@ -1108,11 +1214,15 @@ export async function renderToAudioBuffer(
     // The extended render window (+TAIL) captures their ring-outs; the next
     // segment only picks up notes starting in its own window, so nothing doubles.
     const winEnd = segStart + segDur;
-    const notes = song.notes
-      .filter((n) => n.time >= segStart && n.time < winEnd)
+    const nn0 = firstIndexAtOrAfter(sortedNotes, segStart);
+    const nn1 = firstIndexAtOrAfter(sortedNotes, winEnd);
+    const notes = sortedNotes
+      .slice(nn0, nn1)
       .map((n) => ({ ...n, time: n.time - segStart }));
-    const drums = song.drums
-      .filter((d) => d.time >= segStart && d.time < winEnd)
+    const nd0 = firstIndexAtOrAfter(sortedDrums, segStart);
+    const nd1 = firstIndexAtOrAfter(sortedDrums, winEnd);
+    const drums = sortedDrums
+      .slice(nd0, nd1)
       .map((d) => ({ ...d, time: d.time - segStart }));
     scheduleSegment(ctx, master, noiseBuf, notes, drums);
     const buf = await ctx.startRendering();

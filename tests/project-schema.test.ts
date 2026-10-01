@@ -85,10 +85,14 @@ test("garbage fails validation", () => {
 
 test("unknown schema versions are rejected (migration contract)", () => {
   const p = createProject("v") as unknown as Record<string, unknown>;
-  ok(validateProject(p), "current v2 validates");
+  ok(validateProject(p), "current v3 validates");
   ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 99 }));
+  const asV2 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 2 };
+  delete (asV2 as Record<string, unknown>)["versions"];
+  ok(validateProject(asV2), "v2 without versions still loads");
   const asV1 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 1 };
   delete (asV1 as Record<string, unknown>)["layers"];
+  delete (asV1 as Record<string, unknown>)["versions"];
   ok(validateProject(asV1), "v1 without layers still loads");
   ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 0 }));
 });

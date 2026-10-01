@@ -4,6 +4,7 @@
 import { ArrowUp, ArrowDown, Copy, Trash2, Plus } from "lucide-react";
 import { useProjectStore, useTransportStore } from "@/store/project-store";
 import { uid } from "@/lib/project-schema";
+import { energyJourney, energyLabel } from "@/lib/energy";
 import { Card, SectionTitle, Badge, Label, Slider, Button } from "./ui";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +17,7 @@ export function ArrangementTimeline({ onSelectSection, selectedId }: { onSelectS
   if (!project) return null;
 
   const totalBars = project.arrangement.reduce((a, s) => a + s.bars, 0);
+  const journey = energyJourney(project.arrangement);
 
   const move = (idx: number, dir: -1 | 1) => {
     update((p) => {
@@ -59,8 +61,8 @@ export function ArrangementTimeline({ onSelectSection, selectedId }: { onSelectS
           return (
           <button
             key={s.id}
-            title={`${s.name} — lasts ${s.bars} bars, intensity ${s.energy} of 10. Click to play from here.`}
-            aria-label={`${s.name}, ${s.bars} bars, intensity ${s.energy} of 10. Play from here.`}
+            title={`${s.name} — lasts ${s.bars} bars, ${energyLabel(s.energy)} intensity (${s.energy} of 10). Click to play from here.`}
+            aria-label={`${s.name}, ${s.bars} bars, ${energyLabel(s.energy)} intensity. Play from here.`}
             aria-pressed={isSelected}
             onClick={() => onSelectSection?.(s.id)}
             className={cn(
@@ -80,7 +82,7 @@ export function ArrangementTimeline({ onSelectSection, selectedId }: { onSelectS
             <span className="absolute inset-x-1 top-1.5 truncate text-left text-[10px] font-bold uppercase tracking-wider text-slate-200">
               {s.name}
             </span>
-            <span className="absolute bottom-1.5 left-1.5 font-mono text-[10px] text-slate-400">{s.bars} bars</span>
+            <span className="absolute bottom-1.5 left-1.5 font-mono text-[10px] text-slate-400">{s.bars} bars · {energyLabel(s.energy).toLowerCase()}</span>
             {isSelected && (
               <span className="absolute bottom-1.5 right-1.5 rounded-full bg-[#a78bfa]/25 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-[#d6c9ff]">
                 start
@@ -94,6 +96,7 @@ export function ArrangementTimeline({ onSelectSection, selectedId }: { onSelectS
         {selectedId
           ? "The purple “start” tag shows where playback will begin. Press play to hear it."
           : "Tip: click any part to choose where playback begins."}
+        {" "}Energy journey: {journey.join(" → ")}.
       </p>
 
       <div className="grid gap-2">
@@ -117,7 +120,7 @@ export function ArrangementTimeline({ onSelectSection, selectedId }: { onSelectS
                   onClick={() => update((p) => ({ ...p, arrangement: p.arrangement.map((x) => (x.id === s.id ? { ...x, bars: Math.min(32, x.bars + 1) } : x)) }))}>+</button>
               </div>
               <div className="flex min-w-[160px] flex-1 items-center gap-2">
-                <Label htmlFor={`en-${s.id}`} title="How intense this part sounds — low for calm verses, high for huge choruses">Intensity {s.energy}</Label>
+                <Label htmlFor={`en-${s.id}`} title="How intense this part sounds — low for calm verses, high for huge choruses">Intensity {s.energy} · {energyLabel(s.energy)}</Label>
                 <Slider id={`en-${s.id}`} min={1} max={10} step={1} value={s.energy}
                   onChange={(e) => update((p) => ({ ...p, arrangement: p.arrangement.map((x) => (x.id === s.id ? { ...x, energy: Number((e.target as HTMLInputElement).value) } : x)) }))} />
               </div>

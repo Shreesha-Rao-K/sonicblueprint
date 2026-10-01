@@ -184,3 +184,45 @@ test("every melody style produces notes", () => {
     ok(s.notes.some((n) => n.synth === "pluck" || n.synth === "synth"), `${m.id} melody`);
   }
 });
+
+suite("build performance");
+
+function fixedSeedProject(): SonicProject {
+  return {
+    ...P,
+    originality: { ...P.originality, melodySeed: "perf-regression-v1" },
+  };
+}
+
+test("event build is deterministic for a fixed seed", () => {
+  const p = fixedSeedProject();
+  const a = JSON.stringify(buildSongEvents(p));
+  const b = JSON.stringify(buildSongEvents(p));
+  eq(a, b);
+});
+
+test("fixed-seed default project emits stable event counts", () => {
+  const s = buildSongEvents(fixedSeedProject());
+  eq(s.notes.length, 653);
+  eq(s.drums.length, 832);
+  eq(s.duration, 134.4);
+});
+
+test("large projects build within a generous ceiling", () => {
+  const p = fixedSeedProject();
+  const secs = [];
+  let remaining = 400;
+  let i = 0;
+  while (remaining > 0) {
+    const bars = Math.min(8, remaining);
+    secs.push({ id: `sec_${i}`, name: "VERSE", bars, energy: 6, instruments: [] as string[] });
+    remaining -= bars;
+    i++;
+  }
+  const big: SonicProject = { ...p, arrangement: secs };
+  const t0 = Date.now();
+  const s = buildSongEvents(big);
+  const elapsed = Date.now() - t0;
+  ok(s.notes.length > 0 && s.drums.length > 0, "large build emits events");
+  ok(elapsed < 10000, `large build took ${elapsed}ms (ceiling 10s)`);
+});

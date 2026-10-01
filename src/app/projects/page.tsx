@@ -7,7 +7,8 @@ import { FolderOpen, Copy, Trash2, Download, Upload, Pencil } from "lucide-react
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, TextInput } from "@/components/ui";
 import type { SonicProject } from "@/lib/project-schema";
-import { createProject, validateProject } from "@/lib/project-schema";
+import { createProject } from "@/lib/project-schema";
+import { backupProblem, describeBackup, parseBackupFile, planImport } from "@/lib/backup";
 import { listProjects, saveProject, deleteProject } from "@/lib/storage";
 import { useProjectStore } from "@/store/project-store";
 import { downloadBlob } from "@/lib/mp3-export";
@@ -61,12 +62,24 @@ export default function ProjectsPage() {
                     return;
                   }
                   try {
-                    const parsed: unknown = JSON.parse(await f.text());
-                    if (validateProject(parsed)) {
-                      await saveProject(parsed);
-                      setMsg(`“${parsed.meta.name}” restored.`);
+                    const parsed = parseBackupFile(await f.text());
+                    const problem = backupProblem(parsed);
+                    if (problem) {
+                      setMsg(problem);
+                    } else if (
+                      !confirm(`Restore ${describeBackup(parsed)}${parsed.invalidCount > 0 || parsed.newerCount > 0 ? ` (${parsed.invalidCount + parsed.newerCount} unreadable ${parsed.invalidCount + parsed.newerCount === 1 ? "entry" : "entries"} will be skipped)` : ""} It will be added to the songs on this device.`)
+                    ) {
+                      setMsg("Restore cancelled. Nothing was changed.");
+                    } else {
+                      const existing = new Set((await listProjects()).map((p) => p.meta.id));
+                      const plan = planImport(parsed.projects, existing);
+                      for (const p of [...plan.fresh, ...plan.copies]) await saveProject(p);
+                      const bits = [`Restored ${parsed.projects.length} song${parsed.projects.length === 1 ? "" : "s"}.`];
+                      if (plan.copies.length > 0) bits.push(`${plan.copies.length} already existed here, so ${plan.copies.length === 1 ? "it was kept" : "they were kept"} as “(restored)” ${plan.copies.length === 1 ? "copy" : "copies"}.`);
+                      if (parsed.invalidCount + parsed.newerCount > 0) bits.push(`${parsed.invalidCount + parsed.newerCount} unreadable ${parsed.invalidCount + parsed.newerCount === 1 ? "entry was" : "entries were"} skipped.`);
+                      setMsg(bits.join(" "));
                       refresh();
-                    } else setMsg("That file doesn't look like a SonicBlueprint backup. Nothing was changed.");
+                    }
                   } catch {
                     setMsg("Couldn't read that file — it may be damaged. Nothing was changed.");
                   }
@@ -76,7 +89,7 @@ export default function ProjectsPage() {
             </label>
           </div>
         </div>
-        <p className="text-[13px] text-slate-400">Your songs live in this browser — no account needed. Download a backup file to keep them safe or move them to another device.</p>
+        <p className="text-[13px] text-slate-400">Projects are stored locally on this device/browser — no account, nothing uploaded — and are lost if browser data is cleared or the device is lost. Use Backup to protect or move them. Backup files are copies: the live songs are the ones listed below.</p>
         {msg && <p className="text-sm text-slate-400" role="status">{msg}</p>}
         {projects.length === 0 ? (
           <Card className="p-10 text-center text-slate-400">

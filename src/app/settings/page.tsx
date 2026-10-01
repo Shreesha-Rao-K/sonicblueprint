@@ -11,6 +11,19 @@ import { listProjects, deleteProject } from "@/lib/storage";
 export default function SettingsPage() {
   const t = useTransportStore();
   const [msg, setMsg] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const backUpAll = async () => {
+    const all = await listProjects();
+    const blob = new Blob([JSON.stringify(all, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "SonicBlueprint_backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg(`Backed up ${all.length} song${all.length === 1 ? "" : "s"}. Keep the file somewhere safe — it can be restored from the Saved Projects page.`);
+  };
 
   return (
     <AppShell>
@@ -30,35 +43,43 @@ export default function SettingsPage() {
 
         <Card className="p-5">
           <SectionTitle>Your saved songs</SectionTitle>
-          <p className="text-[13px] text-slate-400">Songs are kept privately in this browser on this device — no account, nothing uploaded. Download backups so you never lose them.</p>
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="outline"
-              onClick={async () => {
-                const all = await listProjects();
-                const blob = new Blob([JSON.stringify(all, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "SonicBlueprint_backup.json";
-                a.click();
-                URL.revokeObjectURL(url);
-                setMsg(`Backed up ${all.length} song${all.length === 1 ? "" : "s"}. Keep the file somewhere safe.`);
-              }}
-            >
+          <p className="text-[13px] text-slate-400">Projects are stored locally on this device/browser. Use Backup to protect or move your projects — clearing browser data loses them.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={backUpAll}>
               Back up all songs
             </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                if (!confirm("Delete ALL songs in this browser? This cannot be undone. Back them up first!")) return;
-                const all = await listProjects();
-                for (const p of all) await deleteProject(p.meta.id);
-                setMsg("Everything deleted. A fresh start — create your first song from the dashboard.");
-              }}
-            >
-              Delete everything
-            </Button>
+            {!confirmingDelete ? (
+              <Button
+                variant="danger"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete everything
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={backUpAll} title="Download a backup first — you can undo the deletion otherwise">
+                  Back up first
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={async () => {
+                    if (!confirm("Delete ALL songs on this device/browser? This cannot be undone. If you have no backup file saved elsewhere, choose “Back up first” instead. Really delete everything?")) {
+                      setConfirmingDelete(false);
+                      return;
+                    }
+                    const all = await listProjects();
+                    for (const p of all) await deleteProject(p.meta.id);
+                    setConfirmingDelete(false);
+                    setMsg("Everything deleted. A fresh start — create your first song from the dashboard.");
+                  }}
+                >
+                  Yes, delete everything
+                </Button>
+                <Button variant="outline" onClick={() => setConfirmingDelete(false)}>
+                  Keep my songs
+                </Button>
+              </>
+            )}
           </div>
           {msg && <p className="mt-2 text-[13px] text-slate-400" role="status">{msg}</p>}
         </Card>

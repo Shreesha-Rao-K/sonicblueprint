@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Download, FileAudio, FileText, Music4, FileJson } from "lucide-react";
 import { useProjectStore } from "@/store/project-store";
-import { validateProject } from "@/lib/project-schema";
+import { backupProblem, parseBackupFile } from "@/lib/backup";
 import { exportMp3, mp3Filename, downloadBlob } from "@/lib/mp3-export";
 import { exportMidi, midiFilename } from "@/lib/midi-export";
 import { exportPdf } from "@/lib/pdf-export";
@@ -105,14 +105,15 @@ export function ExportPanel() {
             }
             try {
               const text = await f.text();
-              const parsed: unknown = JSON.parse(text);
-              // Full structural validation: anything malformed or absurd is
-              // refused here so it can never reach rendering or storage.
-              if (validateProject(parsed)) {
-                useProjectStore.getState().load(parsed);
-                setMsg("Backup restored. Press Save to keep it in this browser.");
+              const parsed = parseBackupFile(text);
+              const problem = backupProblem(parsed);
+              if (problem) {
+                setMsg(problem);
+              } else if (parsed.projects.length > 1) {
+                setMsg(`That file holds ${parsed.projects.length} songs — the studio edits one song at a time. Restore it from the Saved Projects page so every song is kept. Nothing was changed.`);
               } else {
-                setMsg("That file doesn't look like a SonicBlueprint backup. Nothing was changed.");
+                useProjectStore.getState().load(parsed.projects[0]);
+                setMsg(`“${parsed.projects[0].meta.name}” loaded. Press Save to keep it in this browser.`);
               }
             } catch {
               setMsg("Couldn't read that file — it may be damaged. Nothing was changed.");

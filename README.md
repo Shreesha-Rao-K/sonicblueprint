@@ -4,6 +4,8 @@
 
 SonicBlueprint is a free, browser-based music composition and instrumental blueprint tool. It lets you design an instrumental idea visually — chords, drums, bass, instruments and song structure — hear every edit instantly, and take home MP3, MIDI and PDF blueprints. No account, no uploads, nothing to install.
 
+New here? Start with the [User Guide](docs/user-guide.md) — creating, editing, exporting, backups and troubleshooting, all in plain language.
+
 ## Screenshots
 
 ![SonicBlueprint landing page](docs/screenshots/landing.jpg)
@@ -76,11 +78,11 @@ Heavy encoder libraries load on demand, never on page open.
 
 ## Project persistence
 
-Projects are versioned JSON (`schemaVersion: 2`, see format below; v1 files load with every layer switched on) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
+Projects are versioned JSON (`schemaVersion: 3`, see format below; older files load with every layer switched on and an empty version history) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
 
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "meta": { "id": "...", "name": "...", "createdAt": "...", "updatedAt": "...", "version": 1 },
   "config": { "bpm": 100, "keyTonic": "D", "scale": "minor", "timeSignature": "4/4", "mood": "Emotional", "energy": 6, "dynamics": 6 },
   "layers": { "chords": true, "drums": true, "bass": true, "melody": true },
@@ -90,7 +92,8 @@ Projects are versioned JSON (`schemaVersion: 2`, see format below; v1 files load
   "melodyStyle": "gentle",
   "instruments": [{ "id": "...", "group": "piano", "enabled": true, "volume": 0.8, "pan": 0, "octave": 0, "role": "chords", "style": "soft", "patternVariant": "block" }],
   "arrangement": [{ "id": "...", "name": "CHORUS", "bars": 8, "energy": 8, "instruments": [] }],
-  "originality": { "usesImportedRecording": false, "...": false, "melodySeed": "..." }
+  "originality": { "usesImportedRecording": false, "...": false, "melodySeed": "..." },
+  "versions": [{ "id": "...", "label": "Bigger Chorus", "createdAt": "...", "versionNumber": 1, "snapshot": { /* full project minus versions */ } }]
 }
 ```
 
@@ -137,7 +140,7 @@ npm run dev        # http://localhost:3000
 ```bash
 npm run typecheck  # strict TypeScript check
 npm run lint       # ESLint
-npm test           # 90 unit + integration tests (deterministic core logic)
+npm test           # 148 unit + integration tests (deterministic core logic)
 npx tsx qa/audio-qa.mts   # 67 audio-engine regression assertions
 npm run build      # typechecks, then produces an optimized production build
 npm start          # serve the production build locally (default port 3000)

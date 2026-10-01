@@ -13,6 +13,7 @@ import { BassPanel } from "@/components/BassPanel";
 import { InstrumentMixer } from "@/components/InstrumentMixer";
 import { ArrangementTimeline } from "@/components/ArrangementTimeline";
 import { ExportPanel } from "@/components/ExportPanel";
+import { VersionPanel } from "@/components/VersionPanel";
 import { OriginalityPanel } from "@/components/OriginalityPanel";
 import { PianoPreview } from "@/components/PianoPreview";
 import { Button, TextInput } from "@/components/ui";
@@ -95,6 +96,8 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
         positionSec: 0,
         chordIndex: 0,
         sectionIndex: 0,
+        audio: "idle",
+        audioError: null,
       });
     };
   }, [id, router]);
@@ -188,6 +191,7 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
           </div>
           <div className="space-y-4">
             <PanelErrorBoundary label="Export"><ExportPanel /></PanelErrorBoundary>
+            <PanelErrorBoundary label="Versions"><VersionPanel /></PanelErrorBoundary>
             <PanelErrorBoundary label="Originality"><OriginalityPanel /></PanelErrorBoundary>
           </div>
         </div>

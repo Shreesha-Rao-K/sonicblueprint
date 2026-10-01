@@ -1,6 +1,11 @@
-// ── Project schema v1: versioned JSON, defaults, validation ──
+// ── Project schema v3: versioned JSON, defaults, validation ──
+// v1: original release. v2: layer toggles (migrated ON). v3: version history.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+/** Cap on stored versions per project: full snapshots are ~3KB each, so 20
+ * versions stay well under 100KB — trivial for IndexedDB and JSON backups. */
+export const MAX_VERSIONS = 20;
 
 export type LayerId = "chords" | "drums" | "bass" | "melody";
 
@@ -123,15 +128,49 @@ export interface SonicProject {
   arrangement: ArrangementSection[];
   originality: OriginalityFlags;
   layers: LayerState;
+  /** Deliberate saved snapshots ("Save Version"). Optional on stored data so
+   * v1/v2 projects load; always present after normalizeProject. */
+  versions?: ProjectVersion[];
 }
 
-/** Bring any stored project (v1 or v2) up to the current schema.
- * v1 projects predate layer toggles, so every layer defaults ON. */
+/** A deliberate snapshot of a project: full copy of the musical state (never
+ * nested — snapshots carry no versions of their own), plus bookkeeping. */
+export interface ProjectVersion {
+  id: string;
+  /** User label, e.g. "Bigger Chorus". Defaults to "Version N". */
+  label: string;
+  createdAt: string;
+  /** Monotonic per project; never reused after deletes. */
+  versionNumber: number;
+  snapshot: ProjectSnapshot;
+}
+
+/** The musical state inside a version: a whole project minus its history. */
+export type ProjectSnapshot = Omit<SonicProject, "versions">;
+
+/** Bring any stored project (v1, v2 or v3) up to the current schema.
+ * v1 projects predate layer toggles, so every layer defaults ON.
+ * v1/v2 projects predate version history, so they start with no versions. */
 export function normalizeProject(p: SonicProject): SonicProject {
+  const rawVersions = Array.isArray(p.versions) ? p.versions : [];
+  const versions: ProjectVersion[] = rawVersions
+    .filter((v) => isRecord(v))
+    .map((v) => {
+      const rec = { ...(v as Record<string, unknown>) };
+      // Snapshots never nest: strip any versions smuggled inside.
+      if (isRecord(rec["snapshot"])) {
+        const snap = { ...(rec["snapshot"] as Record<string, unknown>) };
+        delete snap["versions"];
+        rec["snapshot"] = snap;
+      }
+      return rec as unknown as ProjectVersion;
+    })
+    .slice(-MAX_VERSIONS);
   return {
     ...p,
     schemaVersion: SCHEMA_VERSION,
     layers: getLayers(p),
+    versions,
   };
 }
 
@@ -215,6 +254,7 @@ export function createProject(name = "Untitled Blueprint", seed?: Partial<SonicP
     instruments: seed?.instruments ?? defaultInstruments(),
     arrangement: seed?.arrangement ?? defaultArrangement(),
     layers: { ...defaultLayers(), ...(seed?.layers ?? {}) },
+    versions: seed?.versions ? [...seed.versions] : [],
     originality: {
       usesImportedRecording: false,
       usesCommercialSample: false,
@@ -247,9 +287,30 @@ function isFiniteNumber(v: unknown): v is number {
 }
 
 export function validateProject(p: unknown): p is SonicProject {
+  return validateProjectInner(p, 0);
+}
+
+function validateVersions(v: unknown, depth: number): v is ProjectVersion[] {
+  // History never nests: depth > 0 means a snapshot smuggled versions.
+  if (depth > 0) return false;
+  if (!Array.isArray(v) || v.length > 100) return false;
+  return v.every((entry) => {
+    if (!isRecord(entry)) return false;
+    if (typeof entry["id"] !== "string" || entry["id"].length === 0) return false;
+    if (typeof entry["label"] !== "string") return false;
+    if (typeof entry["createdAt"] !== "string") return false;
+    if (!isFiniteNumber(entry["versionNumber"])) return false;
+    const snap = entry["snapshot"];
+    if (!isRecord(snap) || "versions" in snap) return false;
+    return validateProjectInner(snap, depth + 1);
+  });
+}
+
+function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   if (!isRecord(p)) return false;
-  // v1 projects predate layer toggles and are migrated on load.
-  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
+  // v1 projects predate layer toggles, v1/v2 predate version history;
+  // both are migrated on load.
+  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== 2 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
   // typeof null === "object", so null sections must be rejected explicitly.
   const meta = p["meta"];
   const config = p["config"];
@@ -258,6 +319,11 @@ export function validateProject(p: unknown): p is SonicProject {
   if (!isRecord(config)) return false;
   // Layer flags are optional (v1 predates them) but must be an object when present.
   if (p["layers"] !== undefined && (!isRecord(p["layers"]) || Array.isArray(p["layers"]))) {
+    return false;
+  }
+
+  // Version history is optional (v1/v2 predate it) but must be well-formed.
+  if (p["versions"] !== undefined && !validateVersions(p["versions"], depth)) {
     return false;
   }
 
@@ -329,4 +395,59 @@ export function touchProject(p: SonicProject): SonicProject {
     ...p,
     meta: { ...p.meta, updatedAt: new Date().toISOString(), version: p.meta.version + 1 },
   };
+}
+
+// ── Version history ("Save Version") ──
+// Pure helpers: snapshots are deep full copies of the musical state. Creating
+// a version never alters the live project except for appending history.
+
+function versionsOf(p: SonicProject): ProjectVersion[] {
+  return Array.isArray(p.versions) ? p.versions : [];
+}
+
+/** Next version number: max existing + 1, so numbers are never reused. */
+export function nextVersionNumber(p: SonicProject): number {
+  let max = 0;
+  for (const v of versionsOf(p)) {
+    if (Number.isFinite(v.versionNumber)) max = Math.max(max, v.versionNumber);
+  }
+  return max + 1;
+}
+
+/** Deep snapshot of the musical state (history excluded — never nested). */
+export function snapshotProject(p: SonicProject): ProjectSnapshot {
+  const clone = structuredClone(p);
+  delete clone.versions;
+  return clone;
+}
+
+/** Append a version. The live musical state is returned untouched. */
+export function createVersion(p: SonicProject, label?: string): SonicProject {
+  const n = nextVersionNumber(p);
+  const entry: ProjectVersion = {
+    id: uid("ver"),
+    label: label?.trim() || `Version ${n}`,
+    createdAt: new Date().toISOString(),
+    versionNumber: n,
+    snapshot: snapshotProject(p),
+  };
+  return { ...p, versions: [...versionsOf(p), entry].slice(-MAX_VERSIONS) };
+}
+
+/** Restore a version into the live project. Keeps the project's identity
+ * (meta) and its history; only the musical state comes from the snapshot.
+ * Returns null when the id is unknown. */
+export function restoreVersion(p: SonicProject, versionId: string): SonicProject | null {
+  const found = versionsOf(p).find((v) => v.id === versionId);
+  if (!found || !isRecord(found.snapshot)) return null;
+  const musical = structuredClone(found.snapshot) as ProjectSnapshot;
+  delete (musical as Partial<SonicProject>).versions;
+  return { ...musical, meta: { ...p.meta }, versions: versionsOf(p) };
+}
+
+/** Delete a version by id. Unknown ids leave the project unchanged. */
+export function deleteVersion(p: SonicProject, versionId: string): SonicProject {
+  const next = versionsOf(p).filter((v) => v.id !== versionId);
+  if (next.length === versionsOf(p).length) return p;
+  return { ...p, versions: next };
 }

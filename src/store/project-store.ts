@@ -3,7 +3,14 @@
 
 import { create } from "zustand";
 import type { SonicProject } from "@/lib/project-schema";
-import { createProject, normalizeProject, touchProject } from "@/lib/project-schema";
+import {
+  createProject,
+  createVersion as appendVersion,
+  deleteVersion as dropVersion,
+  normalizeProject,
+  restoreVersion as applyVersion,
+  touchProject,
+} from "@/lib/project-schema";
 import { saveProject as persist } from "@/lib/storage";
 
 interface ProjectState {
@@ -20,6 +27,9 @@ interface ProjectState {
   undo: () => void;
   redo: () => void;
   save: () => Promise<void>;
+  saveVersion: (label?: string) => Promise<void>;
+  restoreVersion: (versionId: string) => boolean;
+  deleteVersion: (versionId: string) => Promise<void>;
 }
 
 const HISTORY_LIMIT = 60;
@@ -82,9 +92,46 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await persist(touched);
     set({ project: touched, dirty: false, saving: false, lastSavedAt: touched.meta.updatedAt });
   },
+  // Deliberate snapshots ("Save Version"): history metadata only — the musical
+  // state is untouched and undo history is left alone. Persisted immediately
+  // so a version survives even if the tab closes before the next manual save.
+  saveVersion: async (label) => {
+    const { project, save } = get();
+    if (!project) return;
+    set({ project: appendVersion(project, label), dirty: true });
+    await save();
+  },
+  // Restore replaces the working state but stays undoable (Ctrl+Z brings back
+  // the pre-restore state) and unsaved until the next manual save.
+  restoreVersion: (versionId) => {
+    const { project } = get();
+    if (!project) return false;
+    const next = applyVersion(project, versionId);
+    if (!next) return false;
+    set((s) => {
+      if (!s.project) return s;
+      const past = [...s.past, structuredClone(s.project)];
+      while (past.length > HISTORY_LIMIT) past.shift();
+      return { project: next, dirty: true, past, future: [] };
+    });
+    return true;
+  },
+  deleteVersion: async (versionId) => {
+    const { project, save } = get();
+    if (!project) return;
+    const next = dropVersion(project, versionId);
+    if (next === project) return;
+    set({ project: next, dirty: true });
+    await save();
+  },
 }));
 
 // ── Playback state (tiny, updated at ~4Hz max from engine) ──
+// audio tracks the user-facing sound lifecycle: idle → starting → playing,
+// with error when startup fails (message in audioError, retry re-enters
+// starting). Normal playback shows no extra chrome.
+export type AudioUiState = "idle" | "starting" | "playing" | "error";
+
 interface TransportState {
   playing: boolean;
   positionSec: number;
@@ -94,6 +141,8 @@ interface TransportState {
   loop: boolean;
   volume: number;
   muted: boolean;
+  audio: AudioUiState;
+  audioError: string | null;
   set: (s: Partial<TransportState>) => void;
 }
 
@@ -106,5 +155,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   loop: false,
   volume: 0.8,
   muted: false,
+  audio: "idle",
+  audioError: null,
   set: (s) => set(s),
 }));
