@@ -43,7 +43,7 @@ export function checkOriginality(p: SonicProject): OriginalityFinding[] {
     out.push({
       level: "pass",
       title: "Tune has variety",
-      detail: "Nothing here repeats word-for-word — every part gets its own variation of the tune.",
+      detail: "No repeated-melody flag was detected by the current project checks — every part carries its own variation of the tune.",
     });
   }
 

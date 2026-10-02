@@ -86,8 +86,8 @@ export default function LandingPage() {
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-slate-400">
               SonicBlueprint lets creators design instrumental ideas visually — chords, drums, bass,
-              instruments and arrangement — hear every edit instantly, and export production-ready
-              MP3, MIDI and PDF blueprints. No advanced theory required: progressions transpose
+              instruments and arrangement — hear every edit instantly, and export browser-rendered
+              MP3 reference recordings, MIDI and PDF blueprints. No advanced theory required: progressions transpose
               automatically and every chord is shown in plain language with playable preview.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
@@ -102,7 +102,7 @@ export default function LandingPage() {
               {[
                 ["40+", "chord loops"],
                 ["20+", "drum patterns"],
-                ["12", "instrument groups"],
+                ["13", "instrument groups"],
               ].map(([n, l]) => (
                 <div key={l} className="rounded-xl border border-[#1e2a4a] bg-[#0e1424]/80 p-3">
                   <dt className="text-xl font-extrabold text-white">{n}</dt>
@@ -156,7 +156,7 @@ export default function LandingPage() {
 
         <section className="mt-16 grid gap-4 md:grid-cols-3">
           {[
-            { icon: Play, t: "Hear everything", d: "Procedural Web Audio preview renders your actual chords, drums, bass, melody and arrangement — never a stock file." },
+            { icon: Play, t: "Hear everything", d: "Hybrid sampled/synthesized preview plays your actual chords, drums, bass, melody and arrangement — never a stock file." },
             { icon: Music4, t: "Theory made visual", d: "Dm → B♭ → F → C is also shown as D minor → B♭ major → F major → C major, with one-tap audition." },
             { icon: FileText, t: "Export the blueprint", d: "MP3 reference, meaningful MIDI (tempo, time sig, drums, melody) and a production-grade PDF document." },
             { icon: FileAudio, t: "MP3 in-browser", d: "Offline render + client-side encode. Filenames like SonicBlueprint_Track07_Instrumental.mp3." },
@@ -173,7 +173,7 @@ export default function LandingPage() {
 
         <section className="mt-12 rounded-2xl border border-[#2a3a6b] bg-gradient-to-br from-[#101736] to-[#0a0e1a] p-8 text-center">
           <h2 className="text-2xl font-extrabold">Start with a sound, not a blank page.</h2>
-          <p className="mx-auto mt-2 max-w-xl text-slate-400">Twelve quick-start templates — cinematic pop to ambient — every one fully editable down to the last step.</p>
+          <p className="mx-auto mt-2 max-w-xl text-slate-400">Thirteen quick-start templates — cinematic pop to ambient — every one fully editable down to the last step.</p>
           <div className="mt-5 flex justify-center gap-3">
             <Link href="/dashboard" className="rounded-lg bg-[#6e8bff] px-6 py-3 font-semibold text-[#0b1020] hover:bg-[#7f99ff]">Open Dashboard</Link>
             <Link href="/projects" className="rounded-lg border border-[#2a3a6b] px-6 py-3 font-semibold hover:border-[#6e8bff]">Saved Projects</Link>

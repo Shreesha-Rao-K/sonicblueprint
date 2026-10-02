@@ -3,11 +3,11 @@ import type { SonicProject } from "./project-schema";
 import { LAYER_IDS, getLayers, type LayerId } from "./project-schema";
 import { chordLongName } from "./music-theory";
 import { checkOriginality, ORIGINALITY_DISCLAIMER } from "./originality";
-import { quarterBeatsPerBar } from "./audio-engine";
+import { normalizeBpm, quarterBeatsOf } from "./timing";
 
 export function sectionTimeline(p: SonicProject): { name: string; start: string; bars: number; energy: number }[] {
-  const spq = 60 / p.config.bpm;
-  const qpb = quarterBeatsPerBar(p.config.timeSignature);
+  const spq = 60 / normalizeBpm(p.config?.bpm);
+  const qpb = quarterBeatsOf(p.config?.timeSignature ?? "4/4");
   let t = 0;
   return p.arrangement.map((s) => {
     const start = t;
@@ -81,7 +81,7 @@ export async function exportPdf(p: SonicProject): Promise<Blob> {
 
   title("Project");
   kv("Key", `${p.config.keyTonic.replace("b", "♭")} ${p.config.scale === "major" ? "Major" : "Minor"}`);
-  kv("Tempo", `${p.config.bpm} BPM`);
+  kv("Tempo", `${normalizeBpm(p.config?.bpm)} BPM`);
   kv("Time signature", p.config.timeSignature);
   kv("Mood", p.config.mood);
   kv("Energy", `${p.config.energy} / 10`);
@@ -147,7 +147,7 @@ export async function exportPdf(p: SonicProject): Promise<Blob> {
 
   title("Production notes");
   body(
-    `Melody style “${p.melodyStyle}”. Dynamics ${p.config.dynamics}/10: keep verses sparse (piano + pad + sub), open the chorus with strings, brass stabs and full drums. Humanize hats ±6ms; side-chain pad to kick at 2:1 for modern glue. Reference at low volume before export.`
+    `Melody style “${p.melodyStyle}”. Dynamics ${p.config.dynamics}/10: keep verses sparse (piano + pad + sub), open the chorus with strings, brass stabs and full drums. Playback feel (Exact / Subtle / Natural / Expressive) shapes timing and velocity during preview and MP3 rendering only — the notes above are the composition. Reference at low volume before export.`
   );
 
   title("Originality checklist");

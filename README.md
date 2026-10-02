@@ -19,10 +19,10 @@ New here? Start with the [User Guide](docs/user-guide.md) — creating, editing,
 - 40 transposable chord loops, all major/minor keys, tap tempo, 4/4–12/8 time
 - Visual drum step sequencer (20 patterns, swing, punch) with full keyboard operation
 - Chord-following bass (8 styles + drawable rhythm), regenerable tunes (6 styles)
-- 12 layerable instrument groups with mixer controls
+- 13 layerable instrument groups with mixer controls
 - Mix Layers switches — Chords, Drums, Bass and Melody toggle on/off without losing settings; muted layers are excluded from preview, MP3 and MIDI, and marked muted in the PDF
 - Song-structure timeline with per-part intensity, playable from any point
-- Live procedural preview, undo/redo, and an unsaved-changes guard so work is never lost silently
+- Live preview (hybrid sampled/synthesized sound), undo/redo, and an unsaved-changes guard so work is never lost silently
 - One-click MP3, MIDI, PDF and backup-file export
 - Honest originality self-check (see [Originality](#originality))
 
@@ -32,10 +32,10 @@ New here? Start with the [User Guide](docs/user-guide.md) — creating, editing,
 
 Both playback paths share it:
 
-- **Realtime preview** schedules events with a lookahead scheduler on a single reused `AudioContext`, using per-instrument Web Audio synthesis and synthesized drums.
+- **Realtime preview** schedules events with a lookahead scheduler on a single reused `AudioContext`, using licensed multisamples with synthesis fallback and sampled drum hits.
 - **Offline export** renders the same events in short segments through `OfflineAudioContext` (with tail-overlap so long notes ring across boundaries), then encodes MP3 in-browser.
 
-Events live on an integer quarter-note grid, so chord changes can never drift; velocity variation is hash-based, so renders are deterministic.
+Events live on an integer quarter-note grid, so chord changes can never drift; performance feel (Exact / Subtle / Natural / Expressive) is shaped deterministically by the Human Performer engine (phrase arcs, groove, instrument profiles), so renders are deterministic.
 
 ## Chord and progression system
 
@@ -43,7 +43,7 @@ Events live on an integer quarter-note grid, so chord changes can never drift; v
 
 ## Drum sequencer
 
-`src/components/DrumSequencer.tsx` renders 8 synthesized voices (kick, snare, hats, clap, percussion, toms, shaker) on an 8/12/16-step grid with swing and punch controls. Twenty `DRUM_PRESETS` in `src/data/drums.ts` cover electronic pop, rock, trap, cinematic, dance and ambient styles. The grid is a single Tab stop with arrow-key navigation and Space to toggle, and every preset remains fully editable.
+`src/components/DrumSequencer.tsx` renders 8 drum voices (kick, snare, hats, clap, percussion, toms, shaker) on an 8/12/16-step grid with swing and punch controls. Twenty `DRUM_PRESETS` in `src/data/drums.ts` cover electronic pop, rock, trap, cinematic, dance and ambient styles. The grid is a single Tab stop with arrow-key navigation and Space to toggle, and every preset remains fully editable.
 
 ## Bass system
 
@@ -55,7 +55,7 @@ Eight styles in `src/data/styles.ts` (`BASS_STYLES`) — steady roots, octave bo
 
 ## Instrument system
 
-Twelve groups (`src/data/styles.ts`, `INSTRUMENT_DEFS`) can be layered simultaneously, each with enable switch, loudness, left–right placement, pitch range, job (chords, tune, ripple, background, bass, lead, texture), character and playing style. The engine renders every enabled slot, so duplicates stack intentionally.
+Thirteen groups (`src/data/styles.ts`, `INSTRUMENT_DEFS`) can be layered simultaneously, each with enable switch, loudness, left–right placement, pitch range, job (chords, tune, ripple, background, bass, lead, texture), character and playing style. The engine renders every enabled slot, so duplicates stack intentionally.
 
 ## Arrangement system
 
@@ -78,13 +78,13 @@ Heavy encoder libraries load on demand, never on page open.
 
 ## Project persistence
 
-Projects are versioned JSON (`schemaVersion: 3`, see format below; older files load with every layer switched on and an empty version history) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
+Projects are versioned JSON (`schemaVersion: 4`, see format below; older files load with every layer switched on and an empty version history) stored in IndexedDB with a `localStorage` fallback. The editor keeps an undo/redo history, warns before leaving with unsaved changes, and validates every imported file structurally — malformed, absurd or oversized files are refused with a plain-language message and can never crash rendering or pollute storage.
 
 ```jsonc
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "meta": { "id": "...", "name": "...", "createdAt": "...", "updatedAt": "...", "version": 1 },
-  "config": { "bpm": 100, "keyTonic": "D", "scale": "minor", "timeSignature": "4/4", "mood": "Emotional", "energy": 6, "dynamics": 6 },
+  "config": { "bpm": 100, "keyTonic": "D", "scale": "minor", "timeSignature": "4/4", "mood": "Emotional", "energy": 6, "dynamics": 6, "humanize": "subtle" },
   "layers": { "chords": true, "drums": true, "bass": true, "melody": true },
   "chords": { "progressionId": "...", "chords": ["Dm", "Bb", "F", "C"], "beatsPerChord": 4, "octave": 3 },
   "drums": { "patternId": "...", "steps": 16, "grid": { "kick": [...], "...": [...] }, "swing": 0, "velocity": 0.9 },
@@ -122,7 +122,7 @@ Presets are data, not UI: add entries to `src/data/chords.ts` (`CHORD_PROGRESSIO
 
 - [Next.js 16](https://nextjs.org/) (App Router) · [React 19](https://react.dev/) · [TypeScript](https://www.typescriptlang.org/) (strict)
 - [Tailwind CSS v4](https://tailwindcss.com/) · [zustand](https://zustand.docs.pmnd.rs/) (state) · [lucide-react](https://lucide.dev/) (icons)
-- Sound: native [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) (no audio assets, no backend)
+- Sound: native [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) (hybrid sampled + synthesized audio, no backend)
 - Export: [@breezystack/lamejs](https://www.npmjs.com/package/@breezystack/lamejs) (MP3) · [@tonejs/midi](https://github.com/Tonejs/Midi) (MIDI) · [jsPDF](https://github.com/parallax/jsPDF) (PDF)
 - No database, no authentication, no server-side audio rendering.
 
@@ -140,7 +140,7 @@ npm run dev        # http://localhost:3000
 ```bash
 npm run typecheck  # strict TypeScript check
 npm run lint       # ESLint
-npm test           # 148 unit + integration tests (deterministic core logic)
+npm test           # 246 unit + integration tests (deterministic core logic)
 npx tsx qa/audio-qa.mts   # 67 audio-engine regression assertions
 npm run build      # typechecks, then produces an optimized production build
 npm start          # serve the production build locally (default port 3000)
@@ -162,7 +162,7 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, 
 
 ## Limitations
 
-- **Reference sounds, not mastered releases.** Preview and MP3 output are synthesized reference recordings for songwriting and communication, not a substitute for recording, mixing and mastering.
+- **Reference sounds, not mastered releases.** Preview and MP3 output are browser-rendered reference recordings (licensed multisamples with synthesis fallback) for songwriting and communication, not a substitute for recording, mixing and mastering.
 - **Browser-only storage.** Projects live in the browser you created them in. Use backup files before switching devices or clearing site data.
 - **No AI features.** Melodies and rhythms come from deterministic musical rules applied to your settings — there is no machine-learning model, and none is claimed.
 

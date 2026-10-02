@@ -13,6 +13,8 @@ import "./audio-failure.test.js";
 import "./energy.test.js";
 import "./humanize.test.js";
 import "./performance.test.js";
+import "./timing.test.js";
+import "./midi-continuity.test.js";
 import "./sample-bank.test.js";
 import "./storage.test.js";
 import "./song-events.test.js";

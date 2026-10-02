@@ -108,7 +108,7 @@ export interface ProjectConfig {
   mood: string;
   energy: number; // 1..10
   dynamics: number; // 1..10
-  /** Performance feel for playback/render: "off" | "subtle" | "natural".
+  /** Performance feel for playback/render: "off" | "subtle" | "natural" | "expressive".
    * Optional so v1–v3 projects load; normalize defaults to "subtle", which
    * reproduces the historical sound exactly. Never affects composition data. */
   humanize?: HumanizeLevel;

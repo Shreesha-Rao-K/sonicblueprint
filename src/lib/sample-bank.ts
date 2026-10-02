@@ -120,7 +120,6 @@ export function validateBankDef(def: unknown): def is SampleBankDef {
   }
   if (d["kind"] === "drums") {
     if (typeof d["rows"] !== "object" || d["rows"] === null) return false;
-    if (typeof d["rows"] !== "object" || d["rows"] === null) return false;
     const rows = d["rows"] as Record<string, unknown>;
     if (Object.keys(rows).length === 0) return false;
     for (const groups of Object.values(d["rows"] as Record<string, unknown>)) {

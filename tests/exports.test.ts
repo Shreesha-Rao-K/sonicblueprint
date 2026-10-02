@@ -84,3 +84,36 @@ test("export produces a real PDF document", async () => {
   const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
   eq(String.fromCharCode(...head), "%PDF-");
 });
+
+suite("PDF production-notes accuracy");
+
+function pdfText(blob: Blob): Promise<string> {
+  // jsPDF encodes text as UTF-16BE: strip nulls before asserting.
+  return blob.arrayBuffer().then((ab) => {
+    const bytes = new Uint8Array(ab).filter((b) => b !== 0);
+    return new TextDecoder("latin1").decode(bytes);
+  });
+}
+
+test("obsolete processing claims stay out of the blueprint", async () => {
+  const text = (await pdfText(await exportPdf(P))).toLowerCase();
+  for (const stale of ["side-chain", "sidechain", "humanize hats", "2:1 for modern glue"]) {
+    ok(!text.includes(stale), `absent: ${stale}`);
+  }
+});
+
+test("production notes describe feel without inventing processing", async () => {
+  const text = await pdfText(await exportPdf(P));
+  ok(text.includes("Expressive"), "names all four feel levels");
+});
+
+suite("originality wording");
+
+test("variety finding makes no absolute uniqueness claim", async () => {
+  const { checkOriginality } = await import("@/lib/originality");
+  const findings = checkOriginality(P);
+  const variety = findings.find((f) => f.title === "Tune has variety");
+  ok(variety, "variety finding present");
+  ok(!variety!.detail.includes("Nothing here repeats word-for-word"), "no absolute claim");
+  ok(variety!.detail.includes("No repeated-melody flag was detected"), "evidence-based wording");
+});

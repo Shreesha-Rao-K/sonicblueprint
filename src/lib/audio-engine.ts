@@ -266,6 +266,7 @@ import {
   performHash,
   seedHash,
 } from "./humanize";
+import { normalizeBpm, normalizedBeatsPerChord } from "./timing";
 import {
   detectPhrases,
   planChordSpread,
@@ -308,7 +309,7 @@ export function quarterBeatsPerBar(ts: string): number {
 
 export function projectDurationSec(p: SonicProject): number {
   const bpmRaw = p.config?.bpm;
-  const spq = 60 / (Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100);
+  const spq = 60 / normalizeBpm(bpmRaw);
   const qpb = quarterBeatsPerBar(p.config?.timeSignature ?? "4/4");
   const sections = Array.isArray(p.arrangement) ? p.arrangement : [];
   const totalBars = sections.reduce((a, s) => a + (Number.isFinite(s?.bars) ? Math.max(0, s.bars) : 0), 0);
@@ -373,7 +374,7 @@ function hash01(n: number): number {
  * sections) is never touched — only how each note is played. */
 function beatSecFor(p: SonicProject): number {
   const bpmRaw = p.config?.bpm;
-  const bpm = Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100;
+  const bpm = normalizeBpm(bpmRaw);
   return 60 / bpm;
 }
 
@@ -498,7 +499,7 @@ function clampMidi(m: number): number {
 /** Expand arrangement + harmony into flat events. Pure function — shared by realtime + offline. */
 export function buildSongEvents(p: SonicProject): BuiltSong {
   const bpmRaw = p.config?.bpm;
-  const bpm = Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100;
+  const bpm = normalizeBpm(bpmRaw);
   const spq = 60 / bpm;
   const qpb = quarterBeatsPerBar(p.config?.timeSignature ?? "4/4");
   const barDur = qpb * spq;
@@ -511,7 +512,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   // (beats ≤ 8, steps ∈ {8,12,16}) are far inside these bounds.
   const rawChords = Array.isArray(p.chords?.chords) && p.chords.chords.length > 0 ? p.chords.chords : ["Am"];
   const chords = rawChords.slice(0, 64).map((c) => (typeof c === "string" ? c : "Am"));
-  const beatsPerChordQ = Math.max(1, Math.min(16, Math.round(p.chords?.beatsPerChord ?? 4)));
+  const beatsPerChordQ = normalizedBeatsPerChord(p);
   // Layer participation: one source of truth for preview, MP3, MIDI and PDF.
   const layers = getLayers(p);
 
@@ -990,7 +991,7 @@ export class WebAudioEngine {
       const idx = sections.findIndex((s) => s.id === opts.fromSectionId);
       if (idx > 0) {
         const bpmRaw = p.config?.bpm;
-        const spq = 60 / (Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100);
+        const spq = 60 / normalizeBpm(bpmRaw);
         const qpb = quarterBeatsPerBar(p.config?.timeSignature ?? "4/4");
         for (let i = 0; i < idx; i++) {
           const bars = sections[i];
@@ -1143,7 +1144,7 @@ export class WebAudioEngine {
     if (ctx.state !== "running") return;
     warmSampleBanks(["acoustic-drums"], ctx);
     const bpmRaw = p.config?.bpm;
-    const bpm = Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100;
+    const bpm = normalizeBpm(bpmRaw);
     const spq = 60 / bpm;
     const qpb = quarterBeatsPerBar(p.config?.timeSignature ?? "4/4");
     const barDur = qpb * spq;

@@ -189,10 +189,10 @@ export default function SampleQAPage() {
           lines.push(`${name}: ${summarize(buf)}`);
         }
         const healthy = lines.every((l) => !l.includes("NaN"));
-        // Humanize OFF/SUBTLE/NATURAL on the identical miniature: mean timing
+        // Humanize OFF/SUBTLE/NATURAL/EXPRESSIVE on the identical miniature: mean timing
         // wander proves feel without touching composition (same event counts).
         const ref = buildSongEvents({ ...p, config: { ...p.config, humanize: "off" } });
-        for (const feel of ["subtle", "natural"] as const) {
+        for (const feel of ["subtle", "natural", "expressive"] as const) {
           const s = buildSongEvents({ ...p, config: { ...p.config, humanize: feel } });
           let wander = 0;
           for (let i = 0; i < s.notes.length; i++) {
@@ -315,7 +315,7 @@ export default function SampleQAPage() {
           </p>
         </Card>
         <Card className="p-4">
-          <p className="font-bold text-white">Humanization Off / Subtle / Natural (computed live)</p>
+          <p className="font-bold text-white">Humanization Off / Subtle / Natural / Expressive (computed live)</p>
           <p className="mt-1 font-mono text-[11.5px] leading-relaxed text-slate-300">
             {(() => {
               const demo = createProject("QA feel");
@@ -338,7 +338,7 @@ export default function SampleQAPage() {
             })()}
           </p>
           <p className="mt-1 text-[11.5px] text-slate-400">
-            Same composition in all three; only performance timing/velocity differ. Subtle keeps exact timing.
+            Same composition in all four; only performance timing/velocity differ. Subtle keeps exact timing.
           </p>
         </Card>
         <Card className="p-4">
