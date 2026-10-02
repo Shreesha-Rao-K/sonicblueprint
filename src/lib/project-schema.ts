@@ -1,7 +1,10 @@
-// ── Project schema v3: versioned JSON, defaults, validation ──
+// ── Project schema v4: versioned JSON, defaults, validation ──
 // v1: original release. v2: layer toggles (migrated ON). v3: version history.
+// v4: performance humanization preference (defaults to subtle = legacy sound).
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
+
+import { normalizeLevel, type HumanizeLevel } from "./humanize";
 
 /** Cap on stored versions per project: full snapshots are ~3KB each, so 20
  * versions stay well under 100KB — trivial for IndexedDB and JSON backups. */
@@ -65,7 +68,8 @@ export interface BassConfig {
 
 export type InstrumentGroupId =
   | "piano" | "guitar" | "strings" | "synth" | "bass" | "drums"
-  | "percussion" | "pads" | "atmosphere" | "brass" | "plucks" | "arps";
+  | "percussion" | "pads" | "atmosphere" | "brass" | "plucks" | "arps"
+  | "winds";
 
 export interface InstrumentSlot {
   id: string; // unique
@@ -104,6 +108,10 @@ export interface ProjectConfig {
   mood: string;
   energy: number; // 1..10
   dynamics: number; // 1..10
+  /** Performance feel for playback/render: "off" | "subtle" | "natural".
+   * Optional so v1–v3 projects load; normalize defaults to "subtle", which
+   * reproduces the historical sound exactly. Never affects composition data. */
+  humanize?: HumanizeLevel;
 }
 
 export interface OriginalityFlags {
@@ -148,9 +156,11 @@ export interface ProjectVersion {
 /** The musical state inside a version: a whole project minus its history. */
 export type ProjectSnapshot = Omit<SonicProject, "versions">;
 
-/** Bring any stored project (v1, v2 or v3) up to the current schema.
+/** Bring any stored project (v1–v4) up to the current schema.
  * v1 projects predate layer toggles, so every layer defaults ON.
- * v1/v2 projects predate version history, so they start with no versions. */
+ * v1/v2 projects predate version history, so they start with no versions.
+ * v1–v3 projects predate the feel preference, so it defaults to "subtle"
+ * (the historical sound, bit for bit). */
 export function normalizeProject(p: SonicProject): SonicProject {
   const rawVersions = Array.isArray(p.versions) ? p.versions : [];
   const versions: ProjectVersion[] = rawVersions
@@ -171,6 +181,7 @@ export function normalizeProject(p: SonicProject): SonicProject {
     schemaVersion: SCHEMA_VERSION,
     layers: getLayers(p),
     versions,
+    config: { ...p.config, humanize: normalizeLevel(p.config?.humanize) },
   };
 }
 
@@ -239,6 +250,7 @@ export function createProject(name = "Untitled Blueprint", seed?: Partial<SonicP
     config: {
       bpm: 100, keyTonic: "D", scale: "minor",
       timeSignature: "4/4", mood: "Emotional", energy: 6, dynamics: 6,
+      humanize: "subtle",
       ...(seed?.config ?? {}),
     },
     chords: {
@@ -308,9 +320,9 @@ function validateVersions(v: unknown, depth: number): v is ProjectVersion[] {
 
 function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   if (!isRecord(p)) return false;
-  // v1 projects predate layer toggles, v1/v2 predate version history;
-  // both are migrated on load.
-  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== 2 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
+  // v1 projects predate layer toggles, v1–v3 predate version history and the
+  // feel preference; all three are migrated on load.
+  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== 2 && p["schemaVersion"] !== 3 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
   // typeof null === "object", so null sections must be rejected explicitly.
   const meta = p["meta"];
   const config = p["config"];

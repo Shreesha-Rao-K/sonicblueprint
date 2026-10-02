@@ -50,6 +50,15 @@ test("MIDI is deterministic for the same project", async () => {
   eq([...a.slice(0, 64)], [...b.slice(0, 64)]);
 });
 
+test("MIDI carries no audio: sampled slots export as plain notes", async () => {
+  // Default project already uses the sampled Grand Piano.
+  const blob = await exportMidi(P);
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  eq(String.fromCharCode(...buf.slice(0, 4)), "MThd");
+  const text = new TextDecoder("latin1").decode(buf);
+  ok(!text.includes("/samples/") && !text.includes("grand-piano"), "no audio refs");
+});
+
 suite("PDF export data");
 
 test("section timeline is monotonic and complete", () => {

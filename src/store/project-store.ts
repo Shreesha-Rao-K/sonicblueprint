@@ -143,6 +143,8 @@ interface TransportState {
   muted: boolean;
   audio: AudioUiState;
   audioError: string | null;
+  /** Nonfatal notice, e.g. sampled sounds fell back to synthesis. */
+  sampleNote: string | null;
   set: (s: Partial<TransportState>) => void;
 }
 
@@ -157,5 +159,6 @@ export const useTransportStore = create<TransportState>((set) => ({
   muted: false,
   audio: "idle",
   audioError: null,
+  sampleNote: null,
   set: (s) => set(s),
 }));

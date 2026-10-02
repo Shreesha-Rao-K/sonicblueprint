@@ -11,6 +11,8 @@ import "./project-versions.test.js";
 import "./backup.test.js";
 import "./audio-failure.test.js";
 import "./energy.test.js";
+import "./humanize.test.js";
+import "./sample-bank.test.js";
 import "./storage.test.js";
 import "./song-events.test.js";
 import "./layers.test.js";

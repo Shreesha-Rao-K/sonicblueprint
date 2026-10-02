@@ -34,7 +34,11 @@ The **Preset Library** (sidebar) holds all 40 chord loops, 20 drum patterns, 13 
 
 ## 5. Instruments
 
-- 12 instrument groups (piano, guitar, strings, synth, bass, drums, percussion, pads, atmosphere, brass, plucks, arps), 17 ready sounds — layer as many as you like.
+- 13 instrument groups (piano, guitar, strings, synth, bass, drums, percussion, pads, atmosphere, brass, plucks, arps, winds), 21 ready sounds — layer as many as you like.
+- Sounds marked **Sampled** in the mixer play from licensed recordings of real instruments (grand piano, strings, cello, brass, French horn, flute, clarinet, harp, acoustic drums); the rest use the built-in synthesis. Sampled sounds load on first play and are cached; if they ever fail to load, backup synths play instead and the transport says so. Electric piano/organ/guitars/bass guitar/saxophone/mallets stay synthesized: no redistributable sample source was found for them.
+- Loud notes play brighter recordings where the bank has real velocity layers (piano, strings, trumpet, drums); single-recording banks shape loudness only. Drum hits alternate between two recordings of the same hit so repeats don't sound mechanical.
+- Everything shares a subtle generated room and a transparent ceiling that only catches stacked peaks — no per-instrument compression, no obvious echo. Bass stays near the center.
+- Sample banks live decoded in memory while a project uses them (a full piano bank is the heaviest at roughly 130 MB decoded); banks for unused instruments are never loaded.
 - Each mixer slot: on/off, loudness, left–right placement, pitch range, musical job (chords, tune, ripple…), character and playing style. Duplicates stack on purpose.
 
 ## 6. Arrangement
@@ -64,6 +68,8 @@ Four switches — **Chords, Drums, Bass, Melody** — include or exclude each la
 | Backup (JSON) | The complete project file — reopen it on any device running the app |
 
 Exports always render the **current** song state (muted layers excluded). Filenames follow your song name.
+
+**Human feel and exports.** The transport bar's Human feel control (Exact / Subtle / Natural) shapes playback and MP3: Exact plays the grid precisely, Subtle is the classic SonicBlueprint feel, Natural adds human timing and dynamics. MIDI is different by design — it carries the composition itself (notes, tempo, time signature) with fixed reference velocities, so the same project always produces the same MIDI file regardless of the feel setting.
 
 ## 10. Troubleshooting
 

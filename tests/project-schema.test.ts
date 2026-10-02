@@ -7,6 +7,7 @@ import {
   defaultArrangement,
   defaultDrums,
   defaultInstruments,
+  normalizeProject,
   touchProject,
   uid,
   validateProject,
@@ -85,10 +86,15 @@ test("garbage fails validation", () => {
 
 test("unknown schema versions are rejected (migration contract)", () => {
   const p = createProject("v") as unknown as Record<string, unknown>;
-  ok(validateProject(p), "current v3 validates");
+  ok(validateProject(p), "current v4 validates");
   ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 99 }));
+  const asV3 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 3 };
+  delete ((asV3 as Record<string, unknown>)["config"] as Record<string, unknown>)["humanize"];
+  ok(validateProject(asV3), "v3 without feel still loads");
+  eq(normalizeProject(asV3 as unknown as SonicProject).config.humanize, "subtle");
   const asV2 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 2 };
   delete (asV2 as Record<string, unknown>)["versions"];
+  delete ((asV2 as Record<string, unknown>)["config"] as Record<string, unknown>)["humanize"];
   ok(validateProject(asV2), "v2 without versions still loads");
   const asV1 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 1 };
   delete (asV1 as Record<string, unknown>)["layers"];

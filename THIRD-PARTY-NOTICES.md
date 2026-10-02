@@ -35,6 +35,30 @@ tailwindcss 4.3.3 (MIT), @tailwindcss/postcss 4.3.3 (MIT), typescript 5.9.3
 eslint-config-next 16.3.7 (MIT), @types/node 20.19.43 (MIT),
 @types/react 19.3.0 (MIT), @types/react-dom 19.3.0 (MIT).
 
+## Bundled audio samples (shipped as static files under `public/samples/`)
+
+These are converted subsets (44.1 kHz MP3) of freely licensed sample
+libraries — not the complete distributions. See `scripts/make-samples.md`
+for the exact subset recipe so the bundle can be reproduced and audited.
+
+| Source | Used for | License | Redistribution | Attribution |
+|---|---|---|---|---|
+| Salamander Grand Piano v3, Alexander Holm (Yamaha C5; single mf velocity, minor 3rds) | `samples/piano/*.mp3` (Grand Piano, Bright Upright) | CC-BY-3.0 | Permitted with attribution | "Grand piano samples: Salamander Grand Piano by Alexander Holm, CC-BY-3.0" — retain this credit when redistributing the samples or the app |
+| VSCO-2 Community Edition, Versilian Studios (violin/cello sustains, trumpet staccato, orchestral percussion hits) | `samples/violin/`, `samples/cello/`, `samples/trumpet/`, `samples/drums/` | CC0-1.0 (public domain) | Permitted, no conditions | Not required; credited here voluntarily |
+| VSCO-2 Community Edition, Versilian Studios (French horn sustains, flute/clarinet sustains, harp plucks) | `samples/horn/`, `samples/flute/`, `samples/clarinet/`, `samples/harp/` | CC0-1.0 (public domain) | Permitted, no conditions | Not required; credited here voluntarily |
+
+Notes:
+
+- CC-BY-3.0 requires attribution "in any reasonable manner": the credit
+  above appears here, in `scripts/make-samples.md`, and in the app's user
+  guide. Do not remove it while the Salamander-derived files are bundled.
+- CC0 works carry no attribution requirement; Versilian Studios is credited
+  above as a courtesy.
+- Rendered song audio (MP3 exports, playback) created with these samples is
+  the user's own musical work product; no sample-library royalties apply
+  (CC0 unconditionally; CC-BY-3.0 Salamander covers the recording as
+  distributed here with attribution, per its license).
+
 ## Project license status
 
 SonicBlueprint itself currently carries no open-source license

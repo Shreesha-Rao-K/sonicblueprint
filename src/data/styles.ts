@@ -8,6 +8,9 @@ export interface InstrumentDef {
   defaultRole: "chords" | "melody" | "arp" | "pad" | "bass" | "lead" | "texture";
   synth: "piano" | "strings" | "synth" | "pluck" | "pad" | "bass" | "guitar" | "brass" | "perc" | "atmos";
   defaultVolume: number;
+  /** Sampled bank id when this sound has licensed multisamples
+   * (see src/lib/sample-manifest.ts). Absent = pure synthesis. */
+  sampleBank?: string;
 }
 
 export const INSTRUMENT_GROUPS: { id: InstrumentGroupId; label: string; hint: string }[] = [
@@ -23,15 +26,16 @@ export const INSTRUMENT_GROUPS: { id: InstrumentGroupId; label: string; hint: st
   { id: "brass", label: "Brass", hint: "Trumpet-style punches" },
   { id: "plucks", label: "Plucks", hint: "Short catchy notes for tunes" },
   { id: "arps", label: "Arps", hint: "Notes that ripple up and down" },
+  { id: "winds", label: "Winds", hint: "Flute and clarinet voices for tunes" },
 ];
 
 export const INSTRUMENT_DEFS: InstrumentDef[] = [
-  { group: "piano", name: "Grand Piano", description: "Soft felt piano for chords.", defaultRole: "chords", synth: "piano", defaultVolume: 0.8 },
-  { group: "piano", name: "Bright Upright", description: "Forward pop piano.", defaultRole: "chords", synth: "piano", defaultVolume: 0.75 },
+  { group: "piano", name: "Grand Piano", description: "Soft felt piano for chords.", defaultRole: "chords", synth: "piano", defaultVolume: 0.8, sampleBank: "grand-piano" },
+  { group: "piano", name: "Bright Upright", description: "Forward pop piano.", defaultRole: "chords", synth: "piano", defaultVolume: 0.75, sampleBank: "grand-piano" },
   { group: "guitar", name: "Nylon Guitar", description: "Warm fingerpicked layer.", defaultRole: "chords", synth: "guitar", defaultVolume: 0.6 },
   { group: "guitar", name: "Electric Shimmer", description: "Bright clean guitar notes.", defaultRole: "arp", synth: "guitar", defaultVolume: 0.55 },
-  { group: "strings", name: "String Ensemble", description: "Smooth strings that rise and fall.", defaultRole: "pad", synth: "strings", defaultVolume: 0.6 },
-  { group: "strings", name: "Solo Cello", description: "A singing low string melody.", defaultRole: "melody", synth: "strings", defaultVolume: 0.65 },
+  { group: "strings", name: "String Ensemble", description: "Smooth strings that rise and fall.", defaultRole: "pad", synth: "strings", defaultVolume: 0.6, sampleBank: "violin-ensemble" },
+  { group: "strings", name: "Solo Cello", description: "A singing low string melody.", defaultRole: "melody", synth: "strings", defaultVolume: 0.65, sampleBank: "cello" },
   { group: "synth", name: "Analog Saw", description: "Bright buzzy synth sound.", defaultRole: "arp", synth: "synth", defaultVolume: 0.6 },
   { group: "synth", name: "Soft Square", description: "Smooth synth for tunes.", defaultRole: "lead", synth: "synth", defaultVolume: 0.6 },
   { group: "bass", name: "Sub Bass", description: "Deep simple bass you feel in your chest.", defaultRole: "bass", synth: "bass", defaultVolume: 0.85 },
@@ -39,10 +43,14 @@ export const INSTRUMENT_DEFS: InstrumentDef[] = [
   { group: "pads", name: "Warm Pad", description: "Soft background wash that fades in slowly.", defaultRole: "pad", synth: "pad", defaultVolume: 0.55 },
   { group: "pads", name: "Glass Pad", description: "Airy high pad.", defaultRole: "pad", synth: "pad", defaultVolume: 0.5 },
   { group: "atmosphere", name: "Night Air", description: "Soft airy background sound.", defaultRole: "texture", synth: "atmos", defaultVolume: 0.3 },
-  { group: "brass", name: "Brass Stabs", description: "Short punchy bursts for big moments.", defaultRole: "chords", synth: "brass", defaultVolume: 0.6 },
+  { group: "brass", name: "Brass Stabs", description: "Short punchy bursts for big moments.", defaultRole: "chords", synth: "brass", defaultVolume: 0.6, sampleBank: "trumpet" },
+  { group: "brass", name: "French Horn", description: "Warm low brass swells.", defaultRole: "pad", synth: "brass", defaultVolume: 0.6, sampleBank: "french-horn" },
   { group: "plucks", name: "Night Pluck", description: "Catchy short notes for tunes.", defaultRole: "melody", synth: "pluck", defaultVolume: 0.6 },
+  { group: "plucks", name: "Harp", description: "Plucked strings, soft and ringing.", defaultRole: "melody", synth: "pluck", defaultVolume: 0.6, sampleBank: "harp" },
   { group: "arps", name: "Crystal Arp", description: "Notes that ripple up and down.", defaultRole: "arp", synth: "pluck", defaultVolume: 0.55 },
   { group: "percussion", name: "Shaker Bed", description: "Extra ticking rhythm underneath.", defaultRole: "texture", synth: "perc", defaultVolume: 0.4 },
+  { group: "winds", name: "Flute", description: "Breathy high melody voice.", defaultRole: "melody", synth: "atmos", defaultVolume: 0.6, sampleBank: "flute" },
+  { group: "winds", name: "Clarinet", description: "Woody mid-range melody voice.", defaultRole: "melody", synth: "atmos", defaultVolume: 0.6, sampleBank: "clarinet" },
 ];
 
 export interface BassStyle { id: string; label: string; description: string; }

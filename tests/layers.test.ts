@@ -1,5 +1,5 @@
 // Tests: musical layer toggles (chords/drums/bass/melody).
-// Covers schema v3, event gating, MIDI/PDF reflection, persistence,
+// Covers schema v4, event gating, MIDI/PDF reflection, persistence,
 // undo/redo and JSON round-trips.
 import { suite, test, eq, ok } from "./helpers.js";
 import { buildSongEvents } from "@/lib/audio-engine";
@@ -44,8 +44,8 @@ test("layers default to all ON", () => {
   eq(getLayers(P), { chords: true, drums: true, bass: true, melody: true });
 });
 
-test("new projects are schema v3 with layers on", () => {
-  eq(P.schemaVersion, 3);
+test("new projects are schema v4 with layers on", () => {
+  eq(P.schemaVersion, 4);
   ok(validateProject(P));
 });
 
@@ -58,13 +58,13 @@ test("getLayers merges partial flags and coerces junk", () => {
   eq(got.bass, true);
 });
 
-test("v1 projects validate and normalize to all-ON v3", () => {
+test("v1 projects validate and normalize to all-ON v4", () => {
   const v1 = JSON.parse(JSON.stringify(P));
   delete v1.layers;
   v1.schemaVersion = 1;
   ok(validateProject(v1), "v1 loads");
   const norm = normalizeProject(v1 as SonicProject);
-  eq(norm.schemaVersion, 3);
+  eq(norm.schemaVersion, 4);
   eq(getLayers(norm), { chords: true, drums: true, bass: true, melody: true });
   // original musical data survives migration untouched
   eq(norm.chords.chords, P.chords.chords);

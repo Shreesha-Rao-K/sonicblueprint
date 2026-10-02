@@ -62,7 +62,14 @@ export function InstrumentMixer() {
                 <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${inst.enabled ? "left-[22px]" : "left-0.5"}`} />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-bold text-white">{inst.name}</div>
+                <div className="truncate text-[14px] font-bold text-white">
+                  {inst.name}{" "}
+                  {INSTRUMENT_DEFS.some((d) => d.group === inst.group && d.name === inst.name && d.sampleBank) ? (
+                    <span className="ml-1 inline-block rounded-full border border-[#2a3a6b] bg-[#6e8bff]/10 px-1.5 py-px align-middle text-[10px] font-medium normal-case tracking-normal text-[#aebfff]" title="Plays from recorded instrument samples">
+                      Sampled
+                    </span>
+                  ) : null}
+                </div>
                 <div className="text-[11px] uppercase tracking-wider text-slate-400">{inst.group} • {inst.role}</div>
               </div>
               <button

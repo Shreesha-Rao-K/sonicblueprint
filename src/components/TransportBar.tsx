@@ -19,6 +19,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
   // Presence only: handlers read the live project via getState() so editor
   // edits (new object identity per keystroke) don't re-render this bar.
   const projectId = useProjectStore((s) => s.project?.meta.id);
+  const feel = useProjectStore((s) => s.project?.config?.humanize ?? "subtle");
   // Granular subscriptions: the 25ms playback tick only re-renders the
   // elements that read changing fields (time, progress), not the buttons.
   const playing = useTransportStore((s) => s.playing);
@@ -29,6 +30,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
   const muted = useTransportStore((s) => s.muted);
   const audio = useTransportStore((s) => s.audio);
   const audioError = useTransportStore((s) => s.audioError);
+  const sampleNote = useTransportStore((s) => s.sampleNote);
   const setT = useTransportStore((s) => s.set);
   const bpm = useProjectStore((s) => s.project?.config.bpm);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -118,7 +120,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
       });
       eng.setVolume(volume);
       eng.setMuted(muted);
-      setT({ playing: true, audio: "playing", audioError: null });
+      setT({ playing: true, audio: "playing", audioError: null, sampleNote: eng.sampleIssue() });
     } catch (e) {
       fail(e);
     }
@@ -195,6 +197,14 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
             </button>
           </div>
         ) : null}
+        {audio !== "error" && sampleNote ? (
+          <div className="flex min-w-[200px] flex-1 items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400" role="status">
+            <span className="min-w-0 flex-1">{sampleNote}</span>
+            <button onClick={toggle} className="shrink-0 font-semibold text-[#aebfff] underline underline-offset-2 hover:text-white">
+              Retry
+            </button>
+          </div>
+        ) : null}
 
         <div className="relative h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-[#1a2340]" role="progressbar" aria-label="How far through the song" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
           <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#6e8bff] to-[#a78bfa]" style={{ width: `${progress * 100}%` }} />
@@ -203,6 +213,18 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
         <canvas ref={canvasRef} width={160} height={28} className="hidden h-7 w-40 opacity-90 lg:block" aria-hidden="true" />
 
         <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="human-feel">Human feel</label>
+          <select
+            id="human-feel"
+            value={feel}
+            onChange={(e) => useProjectStore.getState().update((p) => ({ ...p, config: { ...p.config, humanize: e.target.value as "off" | "subtle" | "natural" } }))}
+            title="How performed it sounds — Off is exact, Subtle is the classic feel, Natural adds human timing"
+            className="h-10 rounded-lg border border-[#26325a] bg-[#0a0e1a] px-2 text-[13px] text-slate-200 focus:border-[#6e8bff]"
+          >
+            <option value="off">Exact</option>
+            <option value="subtle">Human: subtle</option>
+            <option value="natural">Human: natural</option>
+          </select>
           <Button size="icon" variant="ghost" aria-label={muted ? "Turn sound on" : "Mute"} title={muted ? "Turn sound on" : "Mute"} onClick={() => { const m = !muted; setT({ muted: m }); eng.setMuted(m); }}>
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
