@@ -10,6 +10,7 @@ import { SAMPLE_BANKS } from "@/lib/sample-manifest";
 import { pickLayerVoices, selectDrumHit } from "@/lib/sample-bank";
 import { ensureSampleBanks } from "@/lib/audio-engine";
 import { buildSongEvents, renderToAudioBuffer } from "@/lib/audio-engine";
+import { detectPhrases, planPhrase, PERFORM_PROFILES } from "@/lib/performance";
 import { MIX_DRY, MIX_LEGACY, familyPanScale } from "@/lib/mix";
 import { createProject } from "@/lib/project-schema";
 import { midiToFreq } from "@/lib/music-theory";
@@ -320,7 +321,7 @@ export default function SampleQAPage() {
               const demo = createProject("QA feel");
               demo.arrangement = [{ id: "s1", name: "VERSE", bars: 4, energy: 6, instruments: [] }];
               const ref = buildSongEvents({ ...demo, config: { ...demo.config, humanize: "off" } });
-              return (["subtle", "natural"] as const).map((feel) => {
+              return (["subtle", "natural", "expressive"] as const).map((feel) => {
                 const s = buildSongEvents({ ...demo, config: { ...demo.config, humanize: feel } });
                 let wander = 0;
                 for (let i = 0; i < s.notes.length; i++) {
@@ -338,6 +339,43 @@ export default function SampleQAPage() {
           </p>
           <p className="mt-1 text-[11.5px] text-slate-400">
             Same composition in all three; only performance timing/velocity differ. Subtle keeps exact timing.
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="font-bold text-white">Human Performer V3 (computed live)</p>
+          <p className="mt-1 font-mono text-[11.5px] leading-relaxed text-slate-300">
+            {(() => {
+              const demo: { time: number; midi: number; dur: number; vol: number }[] = [
+                [0, 60], [0.5, 62], [1.0, 64], [1.5, 65], [2.0, 67], [2.5, 69], [3.0, 67], [3.5, 65],
+              ].map(([time, midi]) => ({ time, midi, dur: 0.45, vol: 0.7 }));
+              const phrases = detectPhrases(
+                demo.map((n) => n.time),
+                demo.map((n) => n.midi),
+                1.5
+              );
+              const ph = phrases[0];
+              const lines = [
+                `demo phrase: ${ph.count} notes, peak at note ${ph.peakIdx + 1}, span ${(ph.end - ph.start).toFixed(1)}s`,
+              ];
+              for (const level of ["natural", "expressive"] as const) {
+                const scale = level === "expressive" ? 1.5 : 1;
+                const out = demo.map((n) => ({ ...n }));
+                planPhrase(out, { ...ph }, 0, 4242, PERFORM_PROFILES["strings"], { seed: 4242, beatSec: 0.5, sections: [{ start: 0, energy: 6 }], scale }, Infinity);
+                const vols = out.map((n) => n.vol);
+                const peak = vols.indexOf(Math.max(...vols));
+                lines.push(
+                  `${level}: peak note ${peak + 1}, end vol ${vols[vols.length - 1].toFixed(3)} (start ${vols[0].toFixed(3)})`
+                );
+              }
+              return lines.map((l) => (
+                <span key={l} className="block">
+                  {l}
+                </span>
+              ));
+            })()}
+          </p>
+          <p className="mt-1 text-[11.5px] text-slate-400">
+            Phrase arc (rise → peak → release) replaces independent per-note jitter. Deterministic for the demo seed.
           </p>
         </Card>
         <Card className="p-4">

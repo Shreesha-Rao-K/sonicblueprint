@@ -217,13 +217,14 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
           <select
             id="human-feel"
             value={feel}
-            onChange={(e) => useProjectStore.getState().update((p) => ({ ...p, config: { ...p.config, humanize: e.target.value as "off" | "subtle" | "natural" } }))}
+            onChange={(e) => useProjectStore.getState().update((p) => ({ ...p, config: { ...p.config, humanize: e.target.value as "off" | "subtle" | "natural" | "expressive" } }))}
             title="How performed it sounds — Off is exact, Subtle is the classic feel, Natural adds human timing"
             className="h-10 rounded-lg border border-[#26325a] bg-[#0a0e1a] px-2 text-[13px] text-slate-200 focus:border-[#6e8bff]"
           >
             <option value="off">Exact</option>
             <option value="subtle">Human: subtle</option>
             <option value="natural">Human: natural</option>
+            <option value="expressive">Human: expressive</option>
           </select>
           <Button size="icon" variant="ghost" aria-label={muted ? "Turn sound on" : "Mute"} title={muted ? "Turn sound on" : "Mute"} onClick={() => { const m = !muted; setT({ muted: m }); eng.setMuted(m); }}>
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}

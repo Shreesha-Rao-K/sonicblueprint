@@ -6,7 +6,7 @@
 // separate path with fixed reference velocities and never sees this — MIDI
 // is composition data, not a rendered performance.
 
-export type HumanizeLevel = "off" | "subtle" | "natural";
+export type HumanizeLevel = "off" | "subtle" | "natural" | "expressive";
 
 export interface FamilyFeel {
   /** Max timing wander each way, milliseconds. */
@@ -69,5 +69,5 @@ export function performHash(seed: number, timeMs: number, id: number, channel: n
 }
 
 export function normalizeLevel(level: unknown): HumanizeLevel {
-  return level === "off" || level === "natural" ? level : "subtle";
+  return level === "off" || level === "natural" || level === "expressive" ? level : "subtle";
 }

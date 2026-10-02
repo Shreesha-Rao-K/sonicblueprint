@@ -262,11 +262,17 @@ import { getLayers } from "./project-schema";
 import { MELODY_STYLES } from "@/data/styles";
 import {
   drumFeel,
-  familyFeel,
   normalizeLevel,
   performHash,
   seedHash,
 } from "./humanize";
+import {
+  detectPhrases,
+  planChordSpread,
+  planPhrase,
+  profileFor,
+  type PlanNote,
+} from "./performance";
 import type { SampleBankDef } from "./sample-bank";
 import { SampleBankCache, articulatedDur, pickSample, pickLayerVoices, selectDrumHit, bankAttack, bankRelease } from "./sample-bank";
 import { SAMPLE_BANKS, bankForSlot, banksForProject } from "./sample-manifest";
@@ -320,6 +326,9 @@ interface NoteEvent {
    * Scheduling falls back to `synth` whenever the bank isn't loaded —
    * events stay valid with or without sample assets. */
   sample?: string;
+  /** Source slot group (piano, winds, …) for instrument-family performance.
+   * Synth fallback when unknown; never persisted, rebuilt every render. */
+  fam?: string;
 }
 
 interface DrumEvent {
@@ -362,20 +371,23 @@ function hash01(n: number): number {
  * "subtle" reproduces the historical velocity-only behavior bit for bit,
  * "natural" performs the events. Composition (pitches, rhythm, key, BPM,
  * sections) is never touched — only how each note is played. */
+function beatSecFor(p: SonicProject): number {
+  const bpmRaw = p.config?.bpm;
+  const bpm = Number.isFinite(bpmRaw) ? Math.max(30, Math.min(240, bpmRaw as number)) : 100;
+  return 60 / bpm;
+}
+
 function applyHumanization(
   p: SonicProject,
-  notes: { time: number; midi: number; dur: number; synth: string; vol: number }[],
-  drums: { time: number; row: string; vol: number }[]
+  notes: { time: number; midi: number; dur: number; synth: string; vol: number; fam?: string }[],
+  drums: { time: number; row: string; vol: number; rr?: number }[],
+  beatSec: number,
+  sections: { start: number; energy: number }[]
 ): void {
   const level = normalizeLevel(p.config?.humanize);
   if (level === "off") return;
   const seedRaw = p.originality?.melodySeed;
   const seed = seedHash(typeof seedRaw === "string" && seedRaw.length > 0 ? seedRaw : "x");
-  const famId = (s: string): number => {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
-    return h % 997;
-  };
   if (level === "subtle") {
     // Historical behavior, preserved exactly: velocity breathes ±12%.
     for (const n of notes) {
@@ -389,21 +401,90 @@ function applyHumanization(
     }
     return;
   }
-  for (const n of notes) {
-    const feel = familyFeel(n.synth);
-    const t = Math.round(n.time * 1000);
-    const id = n.midi * 7 + famId(n.synth);
-    n.time = Math.max(0, n.time + ((performHash(seed, t, id, 0) - 0.5) * 2 * feel.timingMs) / 1000);
-    n.vol = clamp01(n.vol * (1 + (performHash(seed, t, id, 1) - 0.5) * 2 * feel.vel));
-    n.dur = Math.max(0.05, n.dur * (1 + (performHash(seed, t, id, 2) - 0.5) * 2 * feel.dur));
+  // natural / expressive → Human Performer plan: phrase arcs, groove-shared
+  // drum timing, piano chord spread. Same (composition, seed, level) always
+  // performs identically; composition fields are never rewritten.
+  const scale = level === "expressive" ? 1.5 : 1;
+  const gapSec = beatSec * 3;
+  // Pitched streams plan per instrument family so a piano phrase never
+  // inherits string bowing (and vice versa). Order within a stream is
+  // already time-ascending from the slot loops.
+  const byFam = new Map<string, number[]>();
+  notes.forEach((n, i) => {
+    const key = `${n.fam ?? ""}|${n.synth}`;
+    const arr = byFam.get(key);
+    if (arr) arr.push(i);
+    else byFam.set(key, [i]);
+  });
+  for (const idxs of byFam.values()) {
+    const first = notes[idxs[0]];
+    const profile = profileFor(first.fam, first.synth);
+    const times = idxs.map((i) => notes[i].time);
+    const midis = idxs.map((i) => notes[i].midi);
+    const phrases = detectPhrases(times, midis, gapSec);
+    let cursor = 0;
+    for (const ph of phrases) {
+      const slice: PlanNote[] = [];
+      for (let k = 0; k < ph.count; k++) {
+        const n = notes[idxs[cursor + k]];
+        slice.push({ time: n.time, midi: n.midi, dur: n.dur, vol: n.vol });
+      }
+      const prevGap = cursor === 0 ? Infinity : times[cursor] - times[cursor - 1];
+      planPhrase(
+        slice,
+        { ...ph, start: times[cursor], end: times[cursor + ph.count - 1] },
+        cursor, seed, profile,
+        { seed, beatSec, sections, scale },
+        prevGap
+      );
+      for (let k = 0; k < ph.count; k++) {
+        const n = notes[idxs[cursor + k]];
+        n.time = slice[k].time;
+        n.vol = clamp01(slice[k].vol);
+        n.dur = Math.max(0.05, slice[k].dur);
+      }
+      // Piano-family chords bloom bottom-up instead of machine-gunning.
+      if ((first.fam === "piano" || first.synth === "piano") && profile.spreadMs > 0) {
+        const buckets = new Map<number, number[]>();
+        for (let k = 0; k < ph.count; k++) {
+          const gi = cursor + k;
+          const bucket = Math.round(notes[idxs[gi]].time * 1000);
+          const arr = buckets.get(bucket);
+          if (arr) arr.push(gi);
+          else buckets.set(bucket, [gi]);
+        }
+        for (const members of buckets.values()) {
+          if (members.length < 2) continue;
+          const ordered = [...members].sort((a, b) => notes[idxs[a]].midi - notes[idxs[b]].midi);
+          planChordSpread(
+            ordered.map((gi) => notes[idxs[gi]]),
+            ordered.map((_, k) => k),
+            seed,
+            profile.spreadMs
+          );
+        }
+      }
+      cursor += ph.count;
+    }
   }
+  // Drums: kick/snare/tom share one groove offset per grid instant so the
+  // backbeat stays glued; hats and extras get their own subtle voice.
+  const CORE_ROWS = new Set(["kick", "snare", "tom"]);
   for (const d of drums) {
     const feel = drumFeel(d.row);
     const t = Math.round(d.time * 1000);
-    const id = famId(d.row);
-    d.time = Math.max(0, d.time + ((performHash(seed, t, id, 0) - 0.5) * 2 * feel.timingMs) / 1000);
-    d.vol = clamp01(d.vol * (1 + (performHash(seed, t, id, 1) - 0.5) * 2 * feel.vel));
+    const shared = CORE_ROWS.has(d.row)
+      ? performHash(seed, t, 977, 20)
+      : performHash(seed, t, famDrumId(d.row), 20);
+    d.time = Math.max(0, d.time + ((shared - 0.5) * 2 * feel.timingMs * scale) / 1000);
+    d.vol = clamp01(d.vol * (1 + (performHash(seed, t, famDrumId(d.row), 21) - 0.5) * 2 * feel.vel));
   }
+}
+
+function famDrumId(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return h % 997;
 }
 
 function clamp01(v: number): number {
@@ -457,10 +538,12 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   // Sample tagging: each note remembers which sampled bank its slot resolves
   // to (null = pure synthesis). Scheduling falls back to `synth` whenever the
   // bank isn't loaded, so events stay valid with or without sample assets.
+  // Family tagging (slot group) drives instrument-specific performance.
   let curSample: string | undefined;
+  let curFam: string | undefined;
   const pushNote = (n: { time: number; midi: number; dur: number; synth: string; vol: number; pan: number }) => {
-    if (curSample === undefined) notes.push(n);
-    else notes.push({ ...n, sample: curSample });
+    if (curSample === undefined && curFam === undefined) notes.push(n);
+    else notes.push({ ...n, ...(curSample !== undefined ? { sample: curSample } : null), ...(curFam !== undefined ? { fam: curFam } : null) });
   };
   // Drum configuration is song-global: resolve rows once instead of per bar.
   const drumCfg = p.drums ?? {};
@@ -501,9 +584,11 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   let lastSlotIdx = -1;
 
   const sections = (Array.isArray(p.arrangement) ? p.arrangement : []).slice(0, 128);
+  const sectionEnergy: { start: number; energy: number }[] = [];
   sections.forEach((sec, secIdx) => {
     sectionStarts.push(t);
     const energy = Number.isFinite(sec.energy) ? Math.max(1, Math.min(10, sec.energy)) : 6;
+    sectionEnergy.push({ start: t, energy });
     const secBars = Number.isFinite(sec.bars) ? Math.max(1, Math.min(64, Math.round(sec.bars))) : 4;
     const energyFactor = 0.6 + (energy / 10) * 0.6;
     for (let bar = 0; bar < secBars; bar++) {
@@ -528,6 +613,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         if (layers.chords) {
         for (const s of allowedSlots(secIdx, "piano")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           if (s.patternVariant === "broken") {
             midis.forEach((m, k) => {
               pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12, dur: spq * 0.45, synth: "piano", vol: s.volume * 0.8 * energyFactor, pan: s.pan });
@@ -540,18 +626,21 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         }
         for (const s of allowedSlots(secIdx, "pads")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           midis.forEach((m) => {
             pushNote({ time: start, midi: m + s.octave * 12 - 12, dur, synth: "pad", vol: s.volume * 0.5 * energyFactor, pan: s.pan });
           });
         }
         for (const s of allowedSlots(secIdx, "strings")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           midis.forEach((m) => {
             pushNote({ time: start, midi: m + s.octave * 12, dur, synth: "strings", vol: s.volume * 0.5 * energyFactor, pan: s.pan });
           });
         }
         for (const s of allowedSlots(secIdx, "guitar")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           midis.forEach((m, k) => {
             pushNote({ time: start + k * 0.03, midi: m + 12 + s.octave * 12, dur: spq * 1.5, synth: "guitar", vol: s.volume * 0.45 * energyFactor, pan: s.pan });
           });
@@ -559,6 +648,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         if (energy >= 4) {
           for (const s of allowedSlots(secIdx, "synth")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
             if (s.role === "melody") continue; // leads handled below
             const arpNotes = [...midis, midis[0] + 12, midis[1] + 12];
             arpNotes.forEach((m, k) => {
@@ -569,6 +659,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         }
         for (const s of allowedSlots(secIdx, "arps")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           const arp = [...midis, midis[0] + 12].reverse();
           arp.forEach((m, k) => {
             pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12 + 12, dur: spq * 0.35, synth: "pluck", vol: s.volume * 0.5 * energyFactor, pan: s.pan });
@@ -577,6 +668,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         if (energy >= 7) {
           for (const s of allowedSlots(secIdx, "brass")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
             midis.forEach((m) => {
               pushNote({ time: start, midi: m + s.octave * 12, dur: spq * 0.6, synth: "brass", vol: s.volume * 0.6, pan: s.pan });
             });
@@ -584,6 +676,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         }
         for (const s of allowedSlots(secIdx, "atmosphere")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
+          curFam = s.group;
           // key-aware shimmer: chord root + fifth, two octaves up
           pushNote({ time: start, midi: midis[0] + 24 + s.octave * 12, dur, synth: "atmos", vol: s.volume * 0.25, pan: s.pan });
           pushNote({ time: start, midi: midis[0] + 31 + s.octave * 12, dur, synth: "atmos", vol: s.volume * 0.18, pan: -s.pan });
@@ -600,6 +693,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         const rootMidi = chordMidis(sym, 1)[0] + bassOct * 12 - 12;
         for (const bassSlot of allowedSlots(secIdx, "bass")) {
           curSample = bankForSlot(bassSlot.group, bassSlot.name) ?? undefined;
+          curFam = bassSlot.group;
           const bv = (bassSlot.volume * bassVol) * energyFactor;
           const st = bassStyle;
           if (st === "sustained" || st === "sub") {
@@ -645,6 +739,7 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
           const mel = generateMelody([sym], beatsPerChordQ, tonicPc, scaleKind, `${p.originality?.melodySeed ?? "x"}:${secIdx}:${ci}`, melodyDensity * (0.5 + energy / 14));
           for (const lead of leads) {
             curSample = bankForSlot(lead.group, lead.name) ?? undefined;
+          curFam = lead.group;
             for (const n of mel) {
               pushNote({ time: start + n.startBeat * spq, midi: n.midi + lead.octave * 12, dur: n.durBeats * spq * 0.9, synth: lead.group === "synth" ? "synth" : lead.group === "winds" ? "atmos" : "pluck", vol: lead.volume * 0.65 * energyFactor, pan: lead.pan });
             }
@@ -676,9 +771,9 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
 
   // Performance humanization (playback/render feel, never composition):
   // identical for realtime and offline. "off" skips everything, "subtle"
-  // keeps the historical velocity-only behavior bit for bit, "natural" adds
-  // seed-driven timing/duration/velocity feel per instrument family.
-  applyHumanization(p, notes, drums);
+  // keeps the historical velocity-only behavior bit for bit, "natural" and
+  // "expressive" run the centralized Human Performer plan (phrases, groove).
+  applyHumanization(p, notes, drums, beatSecFor(p), sectionEnergy);
   for (const n of notes) {
     n.midi = clampMidi(n.midi);
   }

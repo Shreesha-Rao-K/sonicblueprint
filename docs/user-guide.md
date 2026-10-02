@@ -69,7 +69,7 @@ Four switches — **Chords, Drums, Bass, Melody** — include or exclude each la
 
 Exports always render the **current** song state (muted layers excluded). Filenames follow your song name.
 
-**Human feel and exports.** The transport bar's Human feel control (Exact / Subtle / Natural) shapes playback and MP3: Exact plays the grid precisely, Subtle is the classic SonicBlueprint feel, Natural adds human timing and dynamics. MIDI is different by design — it carries the composition itself (notes, tempo, time signature) with fixed reference velocities, so the same project always produces the same MIDI file regardless of the feel setting.
+**Human feel and exports.** The transport bar's Human feel control (Exact / Subtle / Natural / Expressive) shapes playback and MP3: Exact plays the grid precisely, Subtle is the classic SonicBlueprint feel, Natural performs phrases like a player (arcs, breathing, groove), Expressive leans further into the same shape. MIDI is different by design — it carries the composition itself (notes, tempo, time signature) with fixed reference velocities, so the same project always produces the same MIDI file regardless of the feel setting.
 
 ## 10. Troubleshooting
 

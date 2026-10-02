@@ -27,6 +27,7 @@ test("levels normalize, garbage falls back to subtle", () => {
   eq(normalizeLevel("off"), "off");
   eq(normalizeLevel("subtle"), "subtle");
   eq(normalizeLevel("natural"), "natural");
+  eq(normalizeLevel("expressive"), "expressive");
   eq(normalizeLevel(undefined), "subtle");
   eq(normalizeLevel("extreme"), "subtle");
   eq(normalizeLevel(42), "subtle");
@@ -150,8 +151,10 @@ test("MIDI export is identical across feel levels", async () => {
   const off = await bytes("off");
   const sub = await bytes("subtle");
   const nat = await bytes("natural");
+  const exp = await bytes("expressive");
   eq([...off], [...sub]);
   eq([...off], [...nat]);
+  eq([...off], [...exp]);
 });
 
 test("stress project stays bounded under natural feel", () => {
