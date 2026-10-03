@@ -40,6 +40,17 @@ within a 0.06 band (see `pickLayerVoices` in `src/lib/sample-bank.ts`).
 The exact note lists live in `src/lib/sample-manifest.ts` (the manifest is
 the source of truth; this file is the provenance record).
 
+## Known-bad bundled files
+
+- `drums/snare_soft.mp3` and `drums/snare_soft2.mp3` are 252-byte
+  header-only files (the v1 snare source was near-silent, so silence
+  trimming removed all audio frames). Every browser decoder rejects them.
+  They are kept as manifest placeholders on purpose: the engine's per-file
+  tolerance marks those takes unusable and the existing synthesis fallback
+  covers soft snare hits, so playback and exports never break. Do not
+  "fix" them with unlicensed audio; regenerate from the VSCO-2 CE snare
+  source above if this bundle is ever rebuilt.
+
 ## Conversion (per file)
 
 ```bash

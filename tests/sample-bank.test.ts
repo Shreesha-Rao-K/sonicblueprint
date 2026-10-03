@@ -297,6 +297,34 @@ test("failed loads never poison the cache", async () => {
   ok(!cache.has("grand-piano"), "not cached");
 });
 
+test("header-only stub files degrade to null takes, never crash", async () => {
+  // Regression for the two bundled snare_soft stubs (header-only MP3s the
+  // decoder rejects): per-file tolerance must keep the bank usable, with the
+  // dead takes resolving to null so synthesis covers them.
+  const cache = new SampleBankCache();
+  const stubLoader: BankLoader = {
+    fetch: async (url: string) => {
+      if (url.includes("soft")) throw new Error("Unable to decode audio data");
+      return new ArrayBuffer(8);
+    },
+    decode: async () => ({ duration: 1 }),
+  };
+  const def = {
+    ...SAMPLE_BANKS["acoustic-drums"],
+    id: "stub-drums",
+    rows: {
+      snare: [
+        { minVel: 0, urls: ["/samples/drums/snare_soft.mp3", "/samples/drums/snare_soft2.mp3"] },
+        { minVel: 0.75, urls: ["/samples/drums/snare_loud.mp3"] },
+      ],
+    },
+  };
+  const bank = await cache.load(def, stubLoader);
+  const takes = bank.drumBuffers.get("snare")!;
+  eq(takes[0], [null, null]);
+  ok(takes[1][0] !== null, "healthy take survives");
+});
+
 test("clear drops everything for disposal", async () => {
   const cache = new SampleBankCache();
   await cache.load(PIANO, fakeLoader());
