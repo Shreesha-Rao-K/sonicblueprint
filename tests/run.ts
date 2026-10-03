@@ -14,6 +14,7 @@ import "./energy.test.js";
 import "./humanize.test.js";
 import "./performance.test.js";
 import "./timing.test.js";
+import "./playback.test.js";
 import "./midi-continuity.test.js";
 import "./sample-bank.test.js";
 import "./storage.test.js";

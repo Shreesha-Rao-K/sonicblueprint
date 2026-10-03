@@ -56,6 +56,32 @@ export function loadedSampleBanks(): string[] {
   return ids;
 }
 
+/** Sample banks actually referenced by built events, earliest use first.
+ * Pure function of the event plan: disabled layers, unused instruments and
+ * unplayed banks never appear, so playback preparation loads only what the
+ * song will sound — never the whole library. Drums appear only when drum
+ * events exist. */
+export function banksInFirstUseOrder(
+  notes: { time: number; sample?: string }[],
+  drums: { time: number }[]
+): string[] {
+  const firstUse = new Map<string, number>();
+  for (const n of notes) {
+    if (n.sample === undefined) continue;
+    const prev = firstUse.get(n.sample);
+    if (prev === undefined || n.time < prev) firstUse.set(n.sample, n.time);
+  }
+  if (drums.length > 0) {
+    let first = Infinity;
+    for (const d of drums) if (d.time < first) first = d.time;
+    const prev = firstUse.get("acoustic-drums");
+    if (prev === undefined || first < prev) firstUse.set("acoustic-drums", first);
+  }
+  return [...firstUse.entries()]
+    .sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([id]) => id);
+}
+
 // Generated room: synthesized stereo impulse (no assets), one per context.
 const roomCache = new WeakMap<BaseAudioContext, GainNode>();
 /** @internal Exported for unit tests; engine wiring calls this internally. */
@@ -267,6 +293,7 @@ import {
   seedHash,
 } from "./humanize";
 import { normalizeBpm, normalizedBeatsPerChord } from "./timing";
+import { SCHEDULER_HORIZON, planIndices, rebaseIndices } from "./live-plan";
 import {
   detectPhrases,
   planChordSpread,
@@ -298,6 +325,23 @@ export interface PlayOptions {
   loop?: boolean;
   fromSectionId?: string | null;
   onTick?: (s: EngineStatus) => void;
+  /** Fired when background sample preparation finishes (or fails over to
+   * synthesis), so the transport can refresh its nonfatal sound notice. */
+  onSampleNotice?: (msg: string | null) => void;
+}
+
+/** First-play preparation timings (QA diagnostics). prepMs measures the
+ * blocking path only: gesture → audible scheduler start. Bank bytes keep
+ * arriving in the background and are counted as they land. */
+export interface StartupStats {
+  /** Blocking milliseconds from play() entry to scheduler start. */
+  prepMs: number;
+  /** Banks the current song will actually sound, earliest use first. */
+  banksQueued: number;
+  /** Banks decoded so far (background, non-blocking). */
+  banksLoaded: number;
+  /** Banks that fell back to synthesis. */
+  banksFailed: number;
 }
 
 export function quarterBeatsPerBar(ts: string): number {
@@ -888,6 +932,15 @@ export class WebAudioEngine {
   private sampleFailed: string[] = [];
   // Preview-only round-robin salt: each drum preview rotates takes.
   private previewSalt = 0;
+  // Live-edit state: edits made while playing park here and are applied once
+  // per pump tick (≤40Hz coalescing), so slider drags rebuild the plan once,
+  // not dozens of times per second.
+  private pendingProject: SonicProject | null = null;
+  // Deterministic plan revision: incremented on every play/update. QA can
+  // read it to confirm an edit actually produced a new plan.
+  private planRevision = 0;
+  private onSampleNotice: ((msg: string | null) => void) | null = null;
+  private lastStartStats: StartupStats = { prepMs: 0, banksQueued: 0, banksLoaded: 0, banksFailed: 0 };
 
   get analyserNode(): AnalyserNode | null {
     return this.analyser;
@@ -897,6 +950,21 @@ export class WebAudioEngine {
   sampleIssue(): string | null {
     if (this.sampleFailed.length === 0) return null;
     return `Some sounds couldn't load, so backup synths are playing instead. Check your connection and press Play again to retry.`;
+  }
+
+  /** A song plan is loaded (playing or paused): edits can rebase onto it. */
+  hasSong(): boolean {
+    return this.song !== null;
+  }
+
+  /** Current deterministic plan revision (increments per play/update). */
+  revision(): number {
+    return this.planRevision;
+  }
+
+  /** First-play preparation timings for QA diagnostics. */
+  startupStats(): StartupStats {
+    return { ...this.lastStartStats };
   }
 
   private ensure(): AudioContext {
@@ -946,6 +1014,7 @@ export class WebAudioEngine {
   }
 
   async play(p: SonicProject, opts: PlayOptions = {}): Promise<void> {
+    const t0 = performance.now();
     const token = ++this.startToken;
     let ctx: AudioContext;
     try {
@@ -965,23 +1034,13 @@ export class WebAudioEngine {
     if (ctx.state !== "running") {
       throw new AudioStartError("blocked");
     }
-    // Lazy multisamples for this song's instruments (+ drum hits). The
-    // transport already shows "starting"; first play warms the cache.
-    this.sampleFailed = [];
-    try {
-      const { failed } = await ensureSampleBanks(
-        [...banksForProject(p.instruments), "acoustic-drums"],
-        ctx
-      );
-      this.sampleFailed = failed;
-    } catch {
-      // No sample assets at all (offline test envs): pure synthesis covers.
-    }
-    if (token !== this.startToken) return;
     this.stop(false);
     this.project = p;
+    this.pendingProject = null;
+    this.planRevision++;
     this.loop = opts.loop ?? false;
     this.onTick = opts.onTick ?? null;
+    this.onSampleNotice = opts.onSampleNotice ?? null;
     const song = buildSongEvents(p);
     // Section start offset in seconds (absolute song time). Events keep absolute
     // times so chord/section highlighting stays correct when starting mid-song.
@@ -1003,18 +1062,106 @@ export class WebAudioEngine {
     this.playFrom = startAt;
     this.sortedNotes = [...song.notes].sort((a, b) => a.time - b.time);
     this.sortedDrums = [...song.drums].sort((a, b) => a.time - b.time);
-    this.noteIdx = firstIndexAtOrAfter(this.sortedNotes, startAt);
-    this.drumIdx = firstIndexAtOrAfter(this.sortedDrums, startAt);
+    this.noteIdx = planIndices(this.sortedNotes, startAt);
+    this.drumIdx = planIndices(this.sortedDrums, startAt);
     this.loopNoteIdx = this.noteIdx;
     this.loopDrumIdx = this.drumIdx;
     this.startOffset = 0;
     this.startCtxTime = this.ctx!.currentTime + 0.06 - startAt;
     this.timer = setInterval(() => this.pump(), 25);
     this.pump();
+    // Transport is audible from here: first events schedule within one pump
+    // tick. Sample bytes are NOT awaited — the scheduler resolves each voice
+    // at schedule time and falls back to synthesis until its bank lands.
+    // Only banks the song will actually sound are queued, earliest use first.
+    const queued = banksInFirstUseOrder(song.notes, song.drums);
+    this.sampleFailed = [];
+    this.lastStartStats = {
+      prepMs: performance.now() - t0,
+      banksQueued: queued.length,
+      banksLoaded: 0,
+      banksFailed: 0,
+    };
+    void this.prepareBanks(token, ctx, queued);
+  }
+
+  /** Background sample preparation: earliest-needed bank first. Never blocks
+   * the transport; a bank that isn't decoded when its first note arrives is
+   * covered by synthesis, and later notes pick the sample up automatically. */
+  private async prepareBanks(token: number, ctx: BaseAudioContext, ids: string[]): Promise<void> {
+    const failed: string[] = [];
+    let loaded = 0;
+    for (const id of ids) {
+      if (token !== this.startToken) return;
+      if (sampleCache.has(id)) {
+        loaded++;
+        continue;
+      }
+      try {
+        const { failed: f } = await ensureSampleBanks([id], ctx);
+        failed.push(...f);
+        if (sampleCache.has(id)) loaded++;
+      } catch {
+        // No sample assets at all (offline test envs): synthesis covers.
+      }
+      this.lastStartStats = { ...this.lastStartStats, banksLoaded: loaded, banksFailed: failed.length };
+    }
+    if (token !== this.startToken) return;
+    this.sampleFailed = failed;
+    this.lastStartStats = { ...this.lastStartStats, banksLoaded: loaded, banksFailed: failed.length };
+    this.onSampleNotice?.(this.sampleIssue());
+  }
+
+  /** Live edit: swap the playing song for an edited project without stopping.
+   * The transport clock is untouched, so position stays continuous; future
+   * events past the already-scheduled horizon are rebuilt from the new
+   * project, and already-created voices finish naturally. Rapid successive
+   * edits coalesce to one rebuild per scheduler tick. New instruments warm
+   * their banks asynchronously with synth cover until ready. */
+  updateProject(p: SonicProject): void {
+    this.project = p;
+    this.planRevision++;
+    if (!this.song || !this.ctx) return;
+    if (!this.isPlaying()) {
+      // Paused or stopped with a loaded plan: rebuild immediately so resume
+      // (which re-derives indices from the lists) uses the fresh material.
+      this.rebasePlan(this.position());
+      return;
+    }
+    this.pendingProject = p;
+  }
+
+  /** Rebuild the event plan at the current transport position. */
+  private rebasePlan(positionSec: number): void {
+    const p = this.project;
+    if (!p) return;
+    const song = buildSongEvents(p);
+    this.song = song;
+    this.sortedNotes = [...song.notes].sort((a, b) => a.time - b.time);
+    this.sortedDrums = [...song.drums].sort((a, b) => a.time - b.time);
+    const idx = rebaseIndices(this.sortedNotes, this.sortedDrums, positionSec);
+    this.noteIdx = idx.noteIdx;
+    this.drumIdx = idx.drumIdx;
+    this.loopNoteIdx = planIndices(this.sortedNotes, this.playFrom);
+    this.loopDrumIdx = planIndices(this.sortedDrums, this.playFrom);
+    // New instruments may need banks the old plan never used: warm them
+    // without blocking; synthesis covers until they land.
+    if (this.ctx) {
+      const fresh = banksInFirstUseOrder(song.notes, song.drums).filter((id) => !sampleCache.has(id));
+      if (fresh.length > 0) warmSampleBanks(fresh, this.ctx);
+    }
   }
 
   private pump() {
     if (!this.ctx || !this.song || !this.master) return;
+    // Live edit: at most one plan rebuild per tick, at the current transport
+    // position. The clock is untouched, so playback stays continuous.
+    if (this.pendingProject) {
+      this.pendingProject = null;
+      const now = this.ctx.currentTime;
+      this.rebasePlan(Math.max(0, now - this.startCtxTime));
+      if (!this.song) return;
+    }
     const now = this.ctx.currentTime;
     const pos = Math.max(0, now - this.startCtxTime);
     const dur = this.song.duration;
@@ -1030,7 +1177,7 @@ export class WebAudioEngine {
     // Never pile notes while the context is suspended (e.g. OS interruption):
     // indices stay put and playback continues cleanly on resume.
     if (this.ctx.state !== "running") return;
-    const ahead = now + 0.14;
+    const ahead = now + SCHEDULER_HORIZON;
     const base = this.startCtxTime;
     // Late events are clamped to now instead of dropped, so loop restarts and
     // resume points never lose their downbeat to scheduler jitter.
@@ -1101,6 +1248,8 @@ export class WebAudioEngine {
   stop(notify = true) {
     // Invalidate any play() still awaiting resume() so it can't start late.
     this.startToken++;
+    // A stopped transport drops parked edits: the next play() builds fresh.
+    this.pendingProject = null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (notify && this.onTick && this.song) {

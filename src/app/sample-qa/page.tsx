@@ -8,7 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { Button, Card } from "@/components/ui";
 import { SAMPLE_BANKS } from "@/lib/sample-manifest";
 import { pickLayerVoices, selectDrumHit } from "@/lib/sample-bank";
-import { ensureSampleBanks } from "@/lib/audio-engine";
+import { ensureSampleBanks, getEngine } from "@/lib/audio-engine";
 import { buildSongEvents, renderToAudioBuffer } from "@/lib/audio-engine";
 import { detectPhrases, planPhrase, PERFORM_PROFILES } from "@/lib/performance";
 import { MIX_DRY, MIX_LEGACY, familyPanScale } from "@/lib/mix";
@@ -381,6 +381,24 @@ export default function SampleQAPage() {
         <Card className="p-4">
           <p className="font-bold text-white">Engine end-to-end (bank load + offline render)</p>
           <p className="mt-1 font-mono text-[12px] text-slate-300" data-testid="e2e">{e2e}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="font-bold text-white">Playback transport (QA diagnostics)</p>
+          <p className="mt-1 font-mono text-[11.5px] leading-relaxed text-slate-300">
+            {(() => {
+              const eng = getEngine();
+              const st = eng.startupStats();
+              return (
+                <span className="block">
+                  {`plan revision ${eng.revision()}, has song: ${eng.hasSong() ? "yes" : "no"}, ` +
+                    `last prep ${st.prepMs.toFixed(1)}ms, banks queued ${st.banksQueued} / loaded ${st.banksLoaded} / failed ${st.banksFailed}`}
+                </span>
+              );
+            })()}
+          </p>
+          <p className="mt-1 text-[11.5px] text-slate-400">
+            Live values from the shared engine singleton. Prep time is the blocking Play path only; sample bytes arrive in the background.
+          </p>
         </Card>
         <Card className="p-4">
           <p className="font-bold text-white">Drum round-robin (deterministic selection)</p>

@@ -140,7 +140,7 @@ npm run dev        # http://localhost:3000
 ```bash
 npm run typecheck  # strict TypeScript check
 npm run lint       # ESLint
-npm test           # 246 unit + integration tests (deterministic core logic)
+npm test           # 262 unit + integration tests (deterministic core logic)
 npx tsx qa/audio-qa.mts   # 67 audio-engine regression assertions
 npm run build      # typechecks, then produces an optimized production build
 npm start          # serve the production build locally (default port 3000)

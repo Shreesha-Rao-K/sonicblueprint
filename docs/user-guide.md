@@ -69,6 +69,10 @@ Four switches — **Chords, Drums, Bass, Melody** — include or exclude each la
 
 Exports always render the **current** song state (muted layers excluded). Filenames follow your song name.
 
+**Playback starts fast.** Pressing Play begins sound as soon as the resources required for the initial playback window are ready — the first notes may use built-in backup sounds for a moment while the full sampled sounds finish loading in the background. Everything after that plays with the full sound.
+
+**Editing while playing.** You do not need to stop first: change chords, key, tempo, drums, bass, melody, instruments, layers, arrangement or feel while the song plays and future playback follows the edit from a safe scheduling boundary (a fraction of a second ahead). Notes that already started finish naturally, and the transport position never jumps. Tempo changes affect upcoming notes; already-playing sound is never retimed. Very long songs may take a moment to rebuild after an edit.
+
 **Human feel and exports.** The transport bar's Human feel control (Exact / Subtle / Natural / Expressive) shapes playback and MP3: Exact plays the grid precisely, Subtle is the classic SonicBlueprint feel, Natural performs phrases like a player (arcs, breathing, groove), Expressive leans further into the same shape. MIDI is different by design — it carries the composition itself (notes, tempo, time signature) with fixed reference velocities, so the same project always produces the same MIDI file regardless of the feel setting.
 
 ## 10. Troubleshooting

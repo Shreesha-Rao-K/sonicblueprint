@@ -85,6 +85,17 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
     return () => cancelAnimationFrame(raf);
   }, [playing]);
 
+  // Live editing: while a song plan is loaded (playing or paused), project
+  // edits rebase future events without stopping the transport. Parked edits
+  // coalesce in the engine (one rebuild per scheduler tick). Not playing and
+  // no plan: play() builds fresh anyway, so skip the work.
+  const liveProject = useProjectStore((s) => s.project);
+  useEffect(() => {
+    if (!liveProject) return;
+    const engine = getEngine();
+    if (engine.hasSong()) engine.updateProject(liveProject);
+  }, [liveProject]);
+
   if (!projectId) return null;
   const eng = getEngine();
   const starting = audio === "starting";
@@ -104,6 +115,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
       await eng.play(project, {
         loop,
         fromSectionId: fromSectionId ?? null,
+        onSampleNotice: (msg) => useTransportStore.getState().set({ sampleNote: msg }),
         onTick: (s) => {
           // throttle: zustand set is cheap; engine ticks every 25ms but fields rarely change much
           useTransportStore.getState().set({
