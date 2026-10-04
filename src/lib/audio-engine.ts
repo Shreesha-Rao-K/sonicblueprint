@@ -303,7 +303,7 @@ import {
 } from "./performance";
 import type { SampleBankDef } from "./sample-bank";
 import { SampleBankCache, articulatedDur, pickSample, pickLayerVoices, selectDrumHit, bankAttack, bankRelease } from "./sample-bank";
-import { SAMPLE_BANKS, bankForSlot, banksForProject } from "./sample-manifest";
+import { SAMPLE_BANKS, bankForSlot } from "./sample-manifest";
 import {
   MIX_ALL_ON,
   drumRoom,
@@ -1888,13 +1888,15 @@ export async function renderToAudioBuffer(
 ): Promise<AudioBuffer> {
   // Sampled instruments render from the same banks as playback. A throwaway
   // decode context works headless; failures fall back to synthesis silently.
+  // Only banks the event plan actually references are decoded (layer-aware):
+  // an enabled-but-silent sampled slot never costs memory or time.
+  const song = buildSongEvents(p);
   try {
     const decodeCtx = new OfflineAudioContext(1, 1, 44100);
-    await ensureSampleBanks([...banksForProject(p.instruments), "acoustic-drums"], decodeCtx);
+    await ensureSampleBanks(banksInFirstUseOrder(song.notes, song.drums), decodeCtx);
   } catch {
     /* synthesis covers */
   }
-  const song = buildSongEvents(p);
   const sr = 44100;
   const SEG_SEC = 12;
   const totalSec = Math.max(0.5, song.duration);

@@ -61,12 +61,10 @@ ffmpeg -y -i INPUT \
 ```
 
 - Leading digital silence trimmed so attacks land on time.
-- Tails limited to 6 s (short hits unaffected): arrangement notes re-articulate
-  far sooner, and the engine's own release envelope always fades first, so the
-  cap is click-free and inaudible in songs while roughly halving decoded memory.
-- Tails limited to 6 s with a 0.2 s safety fade: arrangement notes re-articulate
-  far sooner, and the engine's own release envelope always lands first — so the
-  cap is inaudible in songs while roughly halving decoded memory.
+- Tails limited to 6 s with a 0.2 s safety fade (short hits unaffected):
+  arrangement notes re-articulate far sooner, and the engine's own release
+  envelope always lands first — so the cap is click-free and inaudible in
+  songs while roughly halving decoded memory.
 - 44.1 kHz to match the export renderer; MP3 (not FLAC/WAV) because every
   browser `decodeAudioData` implementation reads it and files stay ~20x smaller.
 - No EQ, compression, normalization or looping added: envelopes, velocity

@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto px-2 pt-6 text-[11px] leading-relaxed text-slate-400">
           Made for original songs.
           <br />
-          All sound is created live in your browser.
+          Sampled instruments and synthesis, rendered live in your browser.
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">

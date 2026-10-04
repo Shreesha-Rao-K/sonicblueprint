@@ -137,3 +137,87 @@ test("filenames derive safely from project names", () => {
   ok(p.meta.name.length > 0);
   ok(!p.meta.id.includes(" "));
 });
+
+suite("malformed nested data is rejected");
+
+function mutated(mut: (p: Record<string, unknown>) => void): unknown {
+  const p = JSON.parse(JSON.stringify(createProject("Bad"))) as Record<string, unknown>;
+  mut(p);
+  return p;
+}
+
+function cfg(p: Record<string, unknown>): Record<string, unknown> {
+  return p["config"] as Record<string, unknown>;
+}
+
+test("malformed instruments never validate", () => {
+  const base = () => mutated(() => {});
+  ok(validateProject(base()), "control valid project passes");
+  // A. instrument is a string
+  ok(!validateProject(mutated((p) => { (p["instruments"] as unknown[])[0] = "piano"; })), "A string entry");
+  // B. instrument is {}
+  ok(!validateProject(mutated((p) => { (p["instruments"] as unknown[])[0] = {}; })), "B empty object");
+  // C. instrument.volume = NaN
+  ok(!validateProject(mutated((p) => { ((p["instruments"] as Record<string, unknown>[])[0])["volume"] = NaN; })), "C NaN volume");
+  // D. instrument.pan = Infinity
+  ok(!validateProject(mutated((p) => { ((p["instruments"] as Record<string, unknown>[])[0])["pan"] = Infinity; })), "D Infinity pan");
+  // E. invalid instrument group
+  ok(!validateProject(mutated((p) => { ((p["instruments"] as Record<string, unknown>[])[0])["group"] = "theremin"; })), "E bad group");
+  // enabled must be boolean
+  ok(!validateProject(mutated((p) => { ((p["instruments"] as Record<string, unknown>[])[0])["enabled"] = "yes"; })), "string enabled");
+  // volume out of range
+  ok(!validateProject(mutated((p) => { ((p["instruments"] as Record<string, unknown>[])[0])["volume"] = 2; })), "volume > 1");
+});
+
+test("malformed drum grids never validate", () => {
+  const grid = (p: Record<string, unknown>) => (p["drums"] as Record<string, unknown>)["grid"] as Record<string, unknown>;
+  // F. row is a string
+  ok(!validateProject(mutated((p) => { grid(p)["kick"] = "bad"; })), "F string row");
+  // G. row contains non-booleans
+  ok(!validateProject(mutated((p) => { grid(p)["kick"] = [true, 1, false]; })), "G non-boolean cell");
+  // H. absurd row length
+  ok(!validateProject(mutated((p) => { grid(p)["kick"] = new Array(1000).fill(true); })), "H absurd length");
+  // empty row
+  ok(!validateProject(mutated((p) => { grid(p)["kick"] = []; })), "empty row");
+});
+
+test("malformed bass and melody config never validate", () => {
+  // I. malformed bass object
+  ok(!validateProject(mutated((p) => { p["bass"] = { styleId: "ludicrous", octave: 1, volume: 1 }; })), "I bad bass style");
+  ok(!validateProject(mutated((p) => { (p["bass"] as Record<string, unknown>)["volume"] = NaN; })), "I NaN bass volume");
+  // J. malformed melody style
+  ok(!validateProject(mutated((p) => { p["melodyStyle"] = 42; })), "J non-string melody style");
+});
+
+test("malformed arrangement sections never validate", () => {
+  const sec = (p: Record<string, unknown>) => (p["arrangement"] as Record<string, unknown>[])[0];
+  // K. section is a string
+  ok(!validateProject(mutated((p) => { (p["arrangement"] as unknown[])[0] = "VERSE"; })), "K string section");
+  // L. malformed energy
+  ok(!validateProject(mutated((p) => { sec(p)["energy"] = 99; })), "L energy out of range");
+  ok(!validateProject(mutated((p) => { sec(p)["energy"] = NaN; })), "L NaN energy");
+  // bad instrument references
+  ok(!validateProject(mutated((p) => { sec(p)["instruments"] = [42]; })), "non-string instrument ref");
+});
+
+test("malformed config, feel and layers never validate", () => {
+  // M. invalid feel value
+  ok(!validateProject(mutated((p) => { cfg(p)["humanize"] = "extreme"; })), "M bad feel");
+  // N. malformed BPM
+  ok(!validateProject(mutated((p) => { cfg(p)["bpm"] = NaN; })), "N NaN bpm");
+  ok(!validateProject(mutated((p) => { cfg(p)["bpm"] = "fast"; })), "N string bpm");
+  // O. malformed time signature
+  ok(!validateProject(mutated((p) => { cfg(p)["timeSignature"] = "7/11"; })), "O bad signature");
+  // key/scale
+  ok(!validateProject(mutated((p) => { cfg(p)["keyTonic"] = ""; })), "empty key");
+  ok(!validateProject(mutated((p) => { cfg(p)["scale"] = "dorian"; })), "unsupported scale");
+  // P. malformed layers
+  ok(!validateProject(mutated((p) => { (p["layers"] as Record<string, unknown>)["drums"] = "yes"; })), "P string layer flag");
+});
+
+test("rejected imports stay rejected after JSON round-trip", () => {
+  const bad = mutated((p) => { cfg(p)["bpm"] = Infinity; });
+  const revived = JSON.parse(JSON.stringify({ v: bad }));
+  // JSON cannot even represent Infinity (serializes to null) — still invalid.
+  ok(!validateProject(revived.v), "Infinity-ish bpm never loads");
+});

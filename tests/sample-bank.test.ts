@@ -81,6 +81,39 @@ test("new winds/horn/harp banks validate with full coverage", () => {
   }
 });
 
+test("harp D6 maps to MIDI 86 (not 90 = F#6)", () => {
+  const harp = SAMPLE_BANKS["harp"];
+  const d6 = harp.notes.find((n) => n.layers[0].url.endsWith("/D6.mp3"));
+  ok(d6, "D6 asset present");
+  eq(d6!.midi, 86);
+  // filename pitch and manifest pitch agree for every harp note
+  const PCS: Record<string, number> = {
+    C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11,
+  };
+  for (const n of harp.notes) {
+    const file = n.layers[0].url.split("/").pop()!.replace(".mp3", "");
+    const m = file.match(/^([A-G])([b#]?)(\d)$/);
+    ok(m, `parse ${file}`);
+    const expect = PCS[m![1]] + (m![2] === "b" ? -1 : m![2] === "#" ? 1 : 0) + (parseInt(m![3], 10) + 1) * 12;
+    eq(n.midi, expect, file);
+  }
+});
+
+test("harp top-end resolution respects maxShift", () => {
+  const harp = SAMPLE_BANKS["harp"];
+  // D6 (86) is the top recording; ±2 semitones shift onto it.
+  eq(pickSample(harp, 86)!.midi, 86);
+  eq(pickSample(harp, 88)!.midi, 86);
+  eq(pickSample(harp, 85)!.midi, 86);
+  // 84 sits closer to B5 (83) than D6 (86): nearest wins.
+  eq(pickSample(harp, 84)!.midi, 83);
+  // Beyond maxShift there is no recording: synth fallback, never a stretch.
+  eq(pickSample(harp, 89), null);
+  // Deterministic: same input always picks the same recording.
+  eq(pickSample(harp, 87), pickSample(harp, 87));
+  eq(pickSample(harp, 87)!.midi, 86);
+});
+
 suite("sample picking");
 
 test("nearest sample within shift wins, far notes fall back", () => {

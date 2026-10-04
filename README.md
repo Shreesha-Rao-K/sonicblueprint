@@ -35,7 +35,7 @@ Both playback paths share it:
 - **Realtime preview** schedules events with a lookahead scheduler on a single reused `AudioContext`, using licensed multisamples with synthesis fallback and sampled drum hits.
 - **Offline export** renders the same events in short segments through `OfflineAudioContext` (with tail-overlap so long notes ring across boundaries), then encodes MP3 in-browser.
 
-Events live on an integer quarter-note grid, so chord changes can never drift; performance feel (Exact / Subtle / Natural / Expressive) is shaped deterministically by the Human Performer engine (phrase arcs, groove, instrument profiles), so renders are deterministic.
+Events live on an integer quarter-note grid, so chord changes can never drift; performance feel (Exact / Subtle / Natural / Expressive) is shaped deterministically by the Human Performer engine (phrase arcs, groove, instrument profiles), so renders are deterministic. Playback starts progressively (samples load earliest-use-first in the background) and edits made while playing take effect at the next scheduling boundary without stopping the transport.
 
 ## Chord and progression system
 
@@ -128,7 +128,7 @@ Presets are data, not UI: add entries to `src/data/chords.ts` (`CHORD_PROGRESSIO
 
 ## Local setup
 
-Requirements: Node.js 20+ and npm.
+Requirements: Node.js 20.9+ and npm (22 LTS recommended — see `.nvmrc`; CI pins Node 22).
 
 ```bash
 npm install
@@ -140,7 +140,7 @@ npm run dev        # http://localhost:3000
 ```bash
 npm run typecheck  # strict TypeScript check
 npm run lint       # ESLint
-npm test           # 262 unit + integration tests (deterministic core logic)
+npm test           # 271 unit + integration tests (deterministic core logic)
 npx tsx qa/audio-qa.mts   # 67 audio-engine regression assertions
 npm run build      # typechecks, then produces an optimized production build
 npm start          # serve the production build locally (default port 3000)

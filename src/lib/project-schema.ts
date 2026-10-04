@@ -298,6 +298,143 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+/** Bounded string: present, a string, non-empty, and not absurdly large.
+ * Project files come from anywhere on the internet; a 10 MB chord symbol
+ * must never reach the renderers. */
+function isSaneString(v: unknown, maxLen: number, allowEmpty = false): v is string {
+  return typeof v === "string" && (allowEmpty || v.length > 0) && v.length <= maxLen;
+}
+
+const TIME_SIGNATURES = ["4/4", "3/4", "6/8", "12/8"];
+const SCALES = ["major", "minor"];
+const HUMANIZE_LEVELS = ["off", "subtle", "natural", "expressive"];
+const BASS_STYLES = ["root", "octave", "sustained", "rhythmic", "arp", "sub", "electronic", "custom"];
+const INSTRUMENT_GROUPS = [
+  "piano", "guitar", "strings", "synth", "bass", "drums",
+  "percussion", "pads", "atmosphere", "brass", "plucks", "arps", "winds",
+];
+const INSTRUMENT_ROLES = ["chords", "melody", "arp", "pad", "bass", "lead", "texture"];
+const DRUM_ROWS = ["kick", "snare", "hihat", "openhat", "clap", "perc", "tom", "shaker"];
+
+function isValidConfig(config: unknown): boolean {
+  if (!isRecord(config)) return false;
+  // BPM: any finite number loads (the engine clamps to the 30–240 musical
+  // range); NaN/Infinity/strings must never reach timing math.
+  if (!isFiniteNumber(config["bpm"])) return false;
+  if (!isSaneString(config["keyTonic"], 8)) return false;
+  if (typeof config["scale"] !== "string" || !SCALES.includes(config["scale"])) return false;
+  if (typeof config["timeSignature"] !== "string" || !TIME_SIGNATURES.includes(config["timeSignature"])) return false;
+  if (!isSaneString(config["mood"], 128)) return false;
+  if (!isFiniteNumber(config["energy"]) || (config["energy"] as number) < 1 || (config["energy"] as number) > 10) return false;
+  if (!isFiniteNumber(config["dynamics"]) || (config["dynamics"] as number) < 1 || (config["dynamics"] as number) > 10) return false;
+  // Feel preference is optional (v1–v3 predate it) but must be a known level
+  // when present — unknown levels are rejected rather than silently remapped.
+  if (config["humanize"] !== undefined && (typeof config["humanize"] !== "string" || !HUMANIZE_LEVELS.includes(config["humanize"] as string))) {
+    return false;
+  }
+  return true;
+}
+
+function isValidDrums(drums: unknown): boolean {
+  if (!isRecord(drums)) return false;
+  if (
+    !isFiniteNumber(drums["steps"]) ||
+    (drums["steps"] as number) < 1 ||
+    (drums["steps"] as number) > 64
+  ) {
+    return false;
+  }
+  if (!isSaneString(drums["patternId"], 256)) return false;
+  if (drums["swing"] !== undefined && !isFiniteNumber(drums["swing"])) return false;
+  if (drums["velocity"] !== undefined && !isFiniteNumber(drums["velocity"])) return false;
+  const grid = drums["grid"];
+  if (grid !== undefined) {
+    if (!isRecord(grid)) return false;
+    // Known rows, when present, must be boolean arrays of sane length.
+    // Unknown extra rows are ignored (forward compatibility).
+    for (const row of DRUM_ROWS) {
+      const col = (grid as Record<string, unknown>)[row];
+      if (col === undefined) continue;
+      if (!Array.isArray(col) || col.length === 0 || col.length > 256) return false;
+      if (col.some((v) => typeof v !== "boolean")) return false;
+    }
+  }
+  return true;
+}
+
+function isValidBass(bass: unknown): boolean {
+  if (!isRecord(bass)) return false;
+  if (typeof bass["styleId"] !== "string" || !BASS_STYLES.includes(bass["styleId"] as string)) return false;
+  if (!isFiniteNumber(bass["octave"])) return false;
+  if (!isFiniteNumber(bass["volume"])) return false;
+  if (bass["pattern"] !== undefined) {
+    if (!Array.isArray(bass["pattern"]) || (bass["pattern"] as unknown[]).length > 256) return false;
+    if ((bass["pattern"] as unknown[]).some((v) => typeof v !== "boolean")) return false;
+  }
+  return true;
+}
+
+function isValidInstrument(entry: unknown): boolean {
+  if (!isRecord(entry)) return false;
+  if (!isSaneString(entry["id"], 128)) return false;
+  if (typeof entry["group"] !== "string" || !INSTRUMENT_GROUPS.includes(entry["group"])) return false;
+  if (!isSaneString(entry["name"], 256)) return false;
+  if (typeof entry["enabled"] !== "boolean") return false;
+  if (!isFiniteNumber(entry["volume"]) || (entry["volume"] as number) < 0 || (entry["volume"] as number) > 1) return false;
+  if (!isFiniteNumber(entry["pan"]) || (entry["pan"] as number) < -1 || (entry["pan"] as number) > 1) return false;
+  if (!isFiniteNumber(entry["octave"])) return false;
+  if (typeof entry["role"] !== "string" || !INSTRUMENT_ROLES.includes(entry["role"])) return false;
+  if (!isSaneString(entry["style"], 128)) return false;
+  if (!isSaneString(entry["patternVariant"], 128)) return false;
+  return true;
+}
+
+function isValidSection(sec: unknown): boolean {
+  if (!isRecord(sec)) return false;
+  const secRec = sec as Record<string, unknown>;
+  if (!isSaneString(secRec["id"], 128)) return false;
+  // Name and bars are rendered unconditionally by the timeline UI.
+  if (!isSaneString(secRec["name"], 256)) return false;
+  const bars = secRec["bars"];
+  if (!isFiniteNumber(bars) || (bars as number) < 1 || (bars as number) > 64) {
+    return false;
+  }
+  if (secRec["energy"] !== undefined) {
+    if (!isFiniteNumber(secRec["energy"]) || (secRec["energy"] as number) < 1 || (secRec["energy"] as number) > 10) return false;
+  }
+  if (secRec["instruments"] !== undefined) {
+    if (!Array.isArray(secRec["instruments"]) || (secRec["instruments"] as unknown[]).length > 512) return false;
+    if ((secRec["instruments"] as unknown[]).some((v) => typeof v !== "string" || (v as string).length > 128)) return false;
+  }
+  return true;
+}
+
+function isValidLayers(layers: unknown): boolean {
+  if (!isRecord(layers) || Array.isArray(layers)) return false;
+  for (const id of ["chords", "drums", "bass", "melody"]) {
+    const v = (layers as Record<string, unknown>)[id];
+    if (v !== undefined && typeof v !== "boolean") return false;
+  }
+  return true;
+}
+
+function isValidOriginality(originality: unknown): boolean {
+  if (!isRecord(originality)) return false;
+  for (const k of ["usesImportedRecording", "usesCommercialSample", "usesCopiedMelody", "repeatedMelody", "presetOnly"]) {
+    const v = (originality as Record<string, unknown>)[k];
+    if (v !== undefined && typeof v !== "boolean") return false;
+  }
+  if (
+    originality["melodySeed"] !== undefined &&
+    (typeof originality["melodySeed"] !== "string" ||
+      (originality["melodySeed"] as string).length > 512)
+  ) {
+    return false;
+  }
+  if (originality["notes"] !== undefined && !isSaneString(originality["notes"], 2000, true)) return false;
+  return true;
+}
+
 export function validateProject(p: unknown): p is SonicProject {
   return validateProjectInner(p, 0);
 }
@@ -326,11 +463,12 @@ function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   // typeof null === "object", so null sections must be rejected explicitly.
   const meta = p["meta"];
   const config = p["config"];
-  if (!isRecord(meta) || typeof meta["id"] !== "string") return false;
-  if (typeof meta["name"] !== "string") return false;
-  if (!isRecord(config)) return false;
-  // Layer flags are optional (v1 predates them) but must be an object when present.
-  if (p["layers"] !== undefined && (!isRecord(p["layers"]) || Array.isArray(p["layers"]))) {
+  if (!isRecord(meta) || !isSaneString(meta["id"], 128)) return false;
+  if (!isSaneString(meta["name"], 512, true)) return false;
+  if (!isValidConfig(config)) return false;
+  // Layer flags are optional (v1 predates them) but present flags must be
+  // booleans — a "yes" string must not silently mean ON downstream.
+  if (p["layers"] !== undefined && !isValidLayers(p["layers"])) {
     return false;
   }
 
@@ -345,12 +483,12 @@ function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   const chords = p["chords"];
   if (!isRecord(chords)) return false;
   // At least one chord: UI components index into this array.
-  // Every entry must be a string: chord symbols call string methods at render.
+  // Every entry must be a sane string: symbols call string methods at render.
   const chordList = chords["chords"];
   if (!Array.isArray(chordList) || chordList.length < 1 || chordList.length > 128) {
     return false;
   }
-  if (chordList.some((c) => typeof c !== "string")) return false;
+  if (chordList.some((c) => !isSaneString(c, 32))) return false;
   if (
     !isFiniteNumber(chords["beatsPerChord"]) ||
     (chords["beatsPerChord"] as number) < 1 ||
@@ -358,47 +496,26 @@ function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   ) {
     return false;
   }
-  if (typeof chords["progressionId"] !== "string") return false;
+  if (!isSaneString(chords["progressionId"], 256)) return false;
+  if (!isFiniteNumber(chords["octave"])) return false;
 
-  const drums = p["drums"];
-  if (!isRecord(drums)) return false;
-  if (
-    !isFiniteNumber(drums["steps"]) ||
-    (drums["steps"] as number) < 1 ||
-    (drums["steps"] as number) > 64
-  ) {
-    return false;
-  }
-  if (typeof drums["patternId"] !== "string") return false;
-  if (drums["grid"] !== undefined && !isRecord(drums["grid"])) return false;
+  if (!isValidDrums(p["drums"])) return false;
 
-  if (!isRecord(p["bass"])) return false;
+  if (!isValidBass(p["bass"])) return false;
+
+  if (p["melodyStyle"] !== undefined && !isSaneString(p["melodyStyle"], 128)) return false;
 
   const instruments = p["instruments"];
   if (!Array.isArray(instruments) || instruments.length > 512) return false;
+  if (instruments.some((entry) => !isValidInstrument(entry))) return false;
 
   const arrangement = p["arrangement"];
   if (!Array.isArray(arrangement) || arrangement.length > 512) return false;
   for (const sec of arrangement) {
-    if (!isRecord(sec)) return false;
-    const secRec = sec as Record<string, unknown>;
-    // Name and bars are rendered unconditionally by the timeline UI.
-    if (typeof secRec["name"] !== "string") return false;
-    const bars = secRec["bars"];
-    if (!isFiniteNumber(bars) || (bars as number) < 1 || (bars as number) > 64) {
-      return false;
-    }
+    if (!isValidSection(sec)) return false;
   }
 
-  const originality = p["originality"];
-  if (!isRecord(originality)) return false;
-  if (
-    originality["melodySeed"] !== undefined &&
-    (typeof originality["melodySeed"] !== "string" ||
-      (originality["melodySeed"] as string).length > 512)
-  ) {
-    return false;
-  }
+  if (!isValidOriginality(p["originality"])) return false;
   return true;
 }
 

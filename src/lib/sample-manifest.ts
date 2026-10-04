@@ -165,7 +165,7 @@ export const CLARINET_BANK: SampleBankDef = {
 const HARP: [string, number][] = [
   ["E1", 28], ["G1", 31], ["B1", 35], ["D2", 38], ["F2", 41], ["A2", 45],
   ["C3", 48], ["E3", 52], ["G3", 55], ["B3", 59], ["D4", 62], ["F4", 65],
-  ["A4", 69], ["C5", 72], ["E5", 76], ["G5", 79], ["B5", 83], ["D6", 90],
+  ["A4", 69], ["C5", 72], ["E5", 76], ["G5", 79], ["B5", 83], ["D6", 86],
 ];
 
 export const HARP_BANK: SampleBankDef = {
