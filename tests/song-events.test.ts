@@ -226,3 +226,26 @@ test("large projects build within a generous ceiling", () => {
   ok(s.notes.length > 0 && s.drums.length > 0, "large build emits events");
   ok(elapsed < 10000, `large build took ${elapsed}ms (ceiling 10s)`);
 });
+
+suite("drum sequencer accents");
+
+test("drum accents increase velocity on accented steps", () => {
+  const pNoAccent = createProject("NoAccent");
+  // Set humanize to off so velocities are purely deterministic from sequencer
+  pNoAccent.config.humanize = "off";
+  pNoAccent.drums.accents = [false, false, false, false];
+
+  const pAccent = JSON.parse(JSON.stringify(pNoAccent)) as SonicProject;
+  pAccent.drums.accents = [true, false, false, false];
+
+  const sNoAccent = buildSongEvents(pNoAccent);
+  const sAccent = buildSongEvents(pAccent);
+
+  eq(sNoAccent.drums.length, sAccent.drums.length);
+  // Find the first kick hit on beat 0 (time 0)
+  const firstNoAccent = sNoAccent.drums[0];
+  const firstAccent = sAccent.drums[0];
+  ok(firstAccent.vol > firstNoAccent.vol, "accented step has higher velocity than unaccented step");
+  approx(firstAccent.vol, Math.min(1.0, firstNoAccent.vol * 1.25), 1e-4, "accent scales by 1.25");
+});
+

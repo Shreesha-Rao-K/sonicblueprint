@@ -1,8 +1,10 @@
 // Unit tests: music theory core (parsing, transposition, scales, melody bounds).
 import { suite, test, eq, ok, approx } from "./helpers";
 import {
+  applyVoicing,
   chordLongName,
   chordMidiNotes,
+  CHORD_VOICINGS,
   diatonicChord,
   generateMelody,
   midiToFreq,
@@ -11,6 +13,8 @@ import {
   parseChord,
   pcToName,
   rootToPc,
+  SCALE_DEFS,
+  SCALE_INTERVALS,
   scalePcs,
   transposeChord,
   transposeProgression,
@@ -156,3 +160,94 @@ test("different seeds produce different melodies", () => {
   const b = generateMelody(["Dm", "Bb"], 4, 2, "minor", "seed-b", 0.6);
   ok(JSON.stringify(a) !== JSON.stringify(b), "seeds diverge");
 });
+
+suite("extended modal scales and scale definitions");
+
+test("scale definitions contain complete metadata and valid intervals", () => {
+  ok(SCALE_DEFS.length >= 10, "at least 10 scales defined");
+  for (const def of SCALE_DEFS) {
+    ok(def.id in SCALE_INTERVALS, `scale ${def.id} has matching intervals`);
+    ok(def.name.length > 0, `scale ${def.id} has a human name`);
+    ok(def.description.length > 0, `scale ${def.id} has description`);
+    eq(def.intervals[0], 0, `scale ${def.id} begins on tonic (0)`);
+    // Ensure intervals are strictly increasing
+    for (let i = 1; i < def.intervals.length; i++) {
+      ok(def.intervals[i] > def.intervals[i - 1], `scale ${def.id} interval order`);
+      ok(def.intervals[i] < 12, `scale ${def.id} within octave`);
+    }
+  }
+});
+
+test("modal scale pitch classes calculate accurately", () => {
+  // D Dorian: D E F G A B C => [2, 4, 5, 7, 9, 11, 0]
+  eq(scalePcs(2, "dorian"), [2, 4, 5, 7, 9, 11, 0]);
+  // G Mixolydian: G A B C D E F => [7, 9, 11, 0, 2, 4, 5]
+  eq(scalePcs(7, "mixolydian"), [7, 9, 11, 0, 2, 4, 5]);
+  // F Lydian: F G A B C D E => [5, 7, 9, 11, 0, 2, 4]
+  eq(scalePcs(5, "lydian"), [5, 7, 9, 11, 0, 2, 4]);
+  // E Phrygian: E F G A B C D => [4, 5, 7, 9, 11, 0, 2]
+  eq(scalePcs(4, "phrygian"), [4, 5, 7, 9, 11, 0, 2]);
+  // A Harmonic Minor: A B C D E F G# => [9, 11, 0, 2, 4, 5, 8]
+  eq(scalePcs(9, "harmonicMinor"), [9, 11, 0, 2, 4, 5, 8]);
+  // A Blues: A C D D# E G => [9, 0, 2, 3, 4, 7]
+  eq(scalePcs(9, "blues"), [9, 0, 2, 3, 4, 7]);
+});
+
+test("diatonic chords reflect modal qualities", () => {
+  // Dorian degree 0 is minor triad (i), degree 3 is Major (IV)
+  eq(diatonicChord(2, "dorian", 0), "Dm");
+  eq(diatonicChord(2, "dorian", 3), "G");
+  // Mixolydian degree 0 is major (I), degree 6 is flat-VII major (VII)
+  eq(diatonicChord(7, "mixolydian", 0), "G");
+  eq(diatonicChord(7, "mixolydian", 6), "F");
+});
+
+test("melody generation supports modal scales without crashing or going out of bounds", () => {
+  for (const s of SCALE_DEFS) {
+    const chords = ["C", "G"];
+    const melody = generateMelody(chords, 4, 2, s.id, `seed-${s.id}`, 0.7);
+    ok(melody.length > 0, `scale ${s.id} generates melody`);
+    const totalBeats = chords.length * 4;
+    for (const note of melody) {
+      ok(note.midi >= 21 && note.midi <= 108, `note ${note.midi} in piano range`);
+      ok(note.startBeat >= 0 && note.startBeat < totalBeats, "valid beat start");
+    }
+  }
+});
+
+suite("chord voicings");
+
+test("voicing presets are defined and documented", () => {
+  ok(CHORD_VOICINGS.length >= 5, "at least 5 voicings defined");
+  const ids = CHORD_VOICINGS.map((v) => v.id);
+  ok(ids.includes("root"));
+  ok(ids.includes("firstInversion"));
+  ok(ids.includes("secondInversion"));
+  ok(ids.includes("open"));
+  ok(ids.includes("spread"));
+});
+
+test("applyVoicing transforms chord midis correctly", () => {
+  const cTriad = [48, 52, 55]; // C3, E3, G3
+  // Root position
+  eq(applyVoicing(cTriad, "root"), [48, 52, 55]);
+  // First inversion: root moves up an octave => E3, G3, C4
+  eq(applyVoicing(cTriad, "firstInversion"), [52, 55, 60]);
+  // Second inversion: root and third move up an octave => G3, C4, E4
+  eq(applyVoicing(cTriad, "secondInversion"), [55, 60, 64]);
+  // Open / drop 2: on 4-note chord [48, 52, 55, 59] (C E G B)
+  // second from top (G3 = 55) dropped by 12 (43) => [43, 48, 52, 59]
+  const cMaj7 = [48, 52, 55, 59];
+  eq(applyVoicing(cMaj7, "open"), [43, 48, 52, 59]);
+  // Spread: lowest dropped octave (-12), highest raised octave (+12)
+  const spreadTriad = applyVoicing(cTriad, "spread");
+  eq(spreadTriad, [36, 52, 67]);
+});
+
+test("chordMidiNotes respects voicing parameter", () => {
+  const rootNotes = chordMidiNotes("C", 3, "root");
+  const firstInv = chordMidiNotes("C", 3, "firstInversion");
+  eq(rootNotes, [48, 52, 55]);
+  eq(firstInv, [52, 55, 60]);
+});
+

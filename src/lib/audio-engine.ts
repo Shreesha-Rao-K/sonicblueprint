@@ -4,6 +4,12 @@
 // Anything unloaded, out of range, or failed falls back to the existing
 // synthesis path — never silence, never a crash.
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 const sampleCache = new SampleBankCache();
 
 function domLoader(ctx: BaseAudioContext) {
@@ -156,7 +162,9 @@ interface SampleVoice {
   roomLevel: number;
   /** Note velocity 0..1 for conservative brightness shaping. Omit (or ≥1)
    * for full brightness: loud notes stay completely unfiltered. */
-  brightness?: number;
+  brightness?: number | undefined;
+  /** Detune in cents relative to nearest semitone (microtonal scales). */
+  detune?: number | undefined;
 }
 
 /** Gentle velocity brightness for pitched samples: quieter notes lose a
@@ -180,7 +188,8 @@ export function playSampleVoice(v: SampleVoice): void {
   const relStart = Math.max(when + attack, end - Math.max(0.03, v.release));
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.playbackRate.value = Math.pow(2, v.shift / 12);
+  const totalShift = v.shift + (v.detune !== undefined ? v.detune / 100 : 0);
+  src.playbackRate.value = Math.pow(2, totalShift / 12);
   const g = ctx.createGain();
   const vol = Math.max(0.0001, Math.min(1, v.vol));
   g.gain.setValueAtTime(0.0001, when);
@@ -282,8 +291,19 @@ export function sampledDrum(
 // Native Web Audio synthesis (no paid backend, Vercel-safe, SSR-safe).
 // Chords → notes, bass → notes, drums → events, melody → events, arrangement → timeline.
 
-import type { SonicProject } from "./project-schema";
-import { chordMidiNotes, generateMelody, midiToFreq, rootToPc } from "./music-theory";
+import type { SonicProject, DrumRow } from "./project-schema";
+import {
+  chordMidiNotes,
+  generateMelody,
+  midiToFreq,
+  rootToPc,
+  type ScaleKind,
+  SCALE_INTERVALS,
+  type ChordVoicing,
+  getMicrotonalScale,
+  centsToRatio,
+} from "./music-theory";
+import { generateArpEvents } from "./arpeggiator";
 import { getLayers } from "./project-schema";
 import { MELODY_STYLES } from "@/data/styles";
 import {
@@ -312,6 +332,11 @@ import {
   makeSoftClipCurve,
   type MixSwitches,
 } from "./mix";
+import {
+  applyMasterEffects,
+  type MasterFxConfig,
+  type MasterFxHandle,
+} from "./audio-effects";
 
 export interface EngineStatus {
   playing: boolean;
@@ -373,7 +398,9 @@ interface NoteEvent {
   sample?: string;
   /** Source slot group (piano, winds, …) for instrument-family performance.
    * Synth fallback when unknown; never persisted, rebuilt every render. */
-  fam?: string;
+  fam?: string | undefined;
+  /** Detune in cents relative to nearest semitone (microtonal scales). */
+  detune?: number | undefined;
 }
 
 interface DrumEvent {
@@ -398,8 +425,9 @@ function tonicPcOf(p: SonicProject): number {
   return typeof t === "string" && t.length > 0 ? rootToPc(t) : 0;
 }
 
-function scaleKindOf(p: SonicProject): "major" | "minor" | "dorian" | "mixolydian" | "phrygian" | "lydian" | "harmonicMinor" | "pentMajor" | "pentMinor" {
-  return p.config?.scale === "major" ? "major" : "minor";
+function scaleKindOf(p: SonicProject): ScaleKind {
+  const s = p.config?.scale as ScaleKind;
+  return s && s in SCALE_INTERVALS ? s : "minor";
 }
 
 /** Deterministic 0..1 hash for velocity humanization (identical every render). */
@@ -424,8 +452,8 @@ function beatSecFor(p: SonicProject): number {
 
 function applyHumanization(
   p: SonicProject,
-  notes: { time: number; midi: number; dur: number; synth: string; vol: number; fam?: string }[],
-  drums: { time: number; row: string; vol: number; rr?: number }[],
+  notes: { time: number; midi: number; dur: number; synth: string; vol: number; fam?: string | undefined }[],
+  drums: { time: number; row: string; vol: number; rr?: number | undefined }[],
   beatSec: number,
   sections: { start: number; energy: number }[]
 ): void {
@@ -580,22 +608,50 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   };
   const midiCache = new Map<string, number[]>();
   const leadCache = new Map<number, typeof p.instruments>();
+  const microScale = getMicrotonalScale(p.config?.scale as string);
+  const pcDetuneMap = new Map<number, number>();
+  if (microScale) {
+    for (const cents of microScale.cents) {
+      const semitonesFromTonic = Math.round(cents / 100);
+      const pc = ((tonicPc + semitonesFromTonic) % 12 + 12) % 12;
+      const detune = cents - semitonesFromTonic * 100;
+      pcDetuneMap.set(pc, detune);
+    }
+  }
+
   // Sample tagging: each note remembers which sampled bank its slot resolves
   // to (null = pure synthesis). Scheduling falls back to `synth` whenever the
   // bank isn't loaded, so events stay valid with or without sample assets.
   // Family tagging (slot group) drives instrument-specific performance.
   let curSample: string | undefined;
   let curFam: string | undefined;
-  const pushNote = (n: { time: number; midi: number; dur: number; synth: string; vol: number; pan: number }) => {
-    if (curSample === undefined && curFam === undefined) notes.push(n);
-    else notes.push({ ...n, ...(curSample !== undefined ? { sample: curSample } : null), ...(curFam !== undefined ? { fam: curFam } : null) });
+  const pushNote = (n: {
+    time: number;
+    midi: number;
+    dur: number;
+    synth: string;
+    vol: number;
+    pan: number;
+    detune?: number | undefined;
+  }) => {
+    let detune = n.detune;
+    if (detune === undefined && microScale) {
+      const pc = ((n.midi % 12) + 12) % 12;
+      detune = pcDetuneMap.get(pc);
+    }
+    const noteObj: NoteEvent = {
+      ...n,
+      ...(curSample !== undefined ? { sample: curSample } : null),
+      ...(curFam !== undefined ? { fam: curFam } : null),
+      ...(detune !== undefined && Math.abs(detune) > 0.01 ? { detune } : null),
+    };
+    notes.push(noteObj);
   };
   // Drum configuration is song-global: resolve rows once instead of per bar.
   const drumCfg = p.drums ?? {};
   const drumSteps = Number.isFinite(drumCfg.steps)
     ? Math.max(1, Math.min(64, Math.round(drumCfg.steps as number)))
     : 16;
-  const drumStepDur = barDur / drumSteps;
   const drumSwing = Number.isFinite(drumCfg.swing) ? Math.max(0, Math.min(0.9, drumCfg.swing as number)) : 0;
   const drumGroove = Number.isFinite(drumCfg.velocity) ? Math.max(0.1, Math.min(1, drumCfg.velocity as number)) : 0.9;
   const drumGrid = (drumCfg.grid ?? {}) as Record<string, unknown>;
@@ -606,11 +662,12 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
   // Per-row hit counters: deterministic round-robin takes, identical for
   // realtime playback and offline export because they share these events.
   const rrCount = new Map<string, number>();
+  const voicing: ChordVoicing = p.chords?.voicing ?? "root";
   const chordMidis = (sym: string, octave: number): number[] => {
-    const key = `${sym}@${octave}`;
+    const key = `${sym}@${octave}@${voicing}`;
     const hit = midiCache.get(key);
     if (hit) return hit;
-    const out = chordMidiNotes(sym, octave);
+    const out = chordMidiNotes(sym, octave, voicing);
     midiCache.set(key, out);
     return out;
   };
@@ -692,23 +749,47 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
         }
         if (energy >= 4) {
           for (const s of allowedSlots(secIdx, "synth")) {
-          curSample = bankForSlot(s.group, s.name) ?? undefined;
-          curFam = s.group;
+            curSample = bankForSlot(s.group, s.name) ?? undefined;
+            curFam = s.group;
             if (s.role === "melody") continue; // leads handled below
-            const arpNotes = [...midis, midis[0] + 12, midis[1] + 12];
-            arpNotes.forEach((m, k) => {
-              if ((k + bar) % 2 === 0)
-                pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12 + 12, dur: spq * 0.4, synth: "synth", vol: s.volume * 0.4 * energyFactor, pan: s.pan });
-            });
+            if (s.arpeggiator?.enabled) {
+              const seed = `arp:${s.id}:${secIdx}:${bar}:${ci}`;
+              const events = generateArpEvents(midis, s.arpeggiator, start, dur, spq, {
+                volume: s.volume * 0.4 * energyFactor,
+                pan: s.pan,
+                seed,
+              });
+              events.forEach((ev) => {
+                pushNote({ time: ev.time, midi: ev.midi + s.octave * 12 + 12, dur: ev.dur, synth: "synth", vol: ev.vol, pan: ev.pan });
+              });
+            } else {
+              const arpNotes = [...midis, midis[0] + 12, midis[1] + 12];
+              arpNotes.forEach((m, k) => {
+                if ((k + bar) % 2 === 0)
+                  pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12 + 12, dur: spq * 0.4, synth: "synth", vol: s.volume * 0.4 * energyFactor, pan: s.pan });
+              });
+            }
           }
         }
         for (const s of allowedSlots(secIdx, "arps")) {
           curSample = bankForSlot(s.group, s.name) ?? undefined;
           curFam = s.group;
-          const arp = [...midis, midis[0] + 12].reverse();
-          arp.forEach((m, k) => {
-            pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12 + 12, dur: spq * 0.35, synth: "pluck", vol: s.volume * 0.5 * energyFactor, pan: s.pan });
-          });
+          if (s.arpeggiator?.enabled) {
+            const seed = `arp:${s.id}:${secIdx}:${bar}:${ci}`;
+            const events = generateArpEvents(midis, s.arpeggiator, start, dur, spq, {
+              volume: s.volume * 0.5 * energyFactor,
+              pan: s.pan,
+              seed,
+            });
+            events.forEach((ev) => {
+              pushNote({ time: ev.time, midi: ev.midi + s.octave * 12 + 12, dur: ev.dur, synth: "pluck", vol: ev.vol, pan: ev.pan });
+            });
+          } else {
+            const arp = [...midis, midis[0] + 12].reverse();
+            arp.forEach((m, k) => {
+              pushNote({ time: start + k * spq * 0.5, midi: m + s.octave * 12 + 12, dur: spq * 0.35, synth: "pluck", vol: s.volume * 0.5 * energyFactor, pan: s.pan });
+            });
+          }
         }
         if (energy >= 7) {
           for (const s of allowedSlots(secIdx, "brass")) {
@@ -795,19 +876,34 @@ export function buildSongEvents(p: SonicProject): BuiltSong {
 
       // drums for this bar. Skipped entirely when the drums layer is OFF.
       if (layers.drums) {
-      for (let s = 0; s < drumSteps; s++) {
-        let tt = barStart + s * drumStepDur;
-        if (drumSwing > 0 && s % 2 === 1) tt += drumStepDur * drumSwing * 0.5;
         for (const { row, col, len } of drumRows) {
-          if (col[s % len]) {
-            // scale drums by section energy: fewer hats in low energy
-            if (energy <= 3 && (row === "openhat" || row === "tom")) continue;
-            const n = (rrCount.get(row) ?? 0);
-            rrCount.set(row, n + 1);
-            drums.push({ time: tt, row, vol: drumGroove, rr: n });
+          const rKey = row as DrumRow;
+          const rSteps = Number.isFinite(drumCfg.rowSteps?.[rKey])
+            ? Math.max(1, Math.min(64, Math.round(drumCfg.rowSteps![rKey]!)))
+            : drumSteps;
+          const rCycle = Number.isFinite(drumCfg.rowCycles?.[rKey])
+            ? Math.max(1, Math.min(64, Math.round(drumCfg.rowCycles![rKey]!)))
+            : rSteps;
+          const rStepDur = barDur / rSteps;
+
+          for (let s = 0; s < rSteps; s++) {
+            const globalStep = absBar * rSteps + s;
+            const cycleIdx = globalStep % rCycle;
+            if (col[cycleIdx % len]) {
+              // scale drums by section energy: fewer hats in low energy
+              if (energy <= 3 && (row === "openhat" || row === "tom")) continue;
+              let tt = barStart + s * rStepDur;
+              if (drumSwing > 0 && s % 2 === 1) tt += rStepDur * drumSwing * 0.5;
+              const isAccented = Array.isArray(drumCfg.accents) && drumCfg.accents.length > 0
+                ? Boolean(drumCfg.accents[s % drumCfg.accents.length])
+                : false;
+              const hitVol = isAccented ? Math.min(1.0, drumGroove * 1.25) : drumGroove;
+              const n = (rrCount.get(row) ?? 0);
+              rrCount.set(row, n + 1);
+              drums.push({ time: tt, row, vol: hitVol, rr: n });
+            }
           }
         }
-      }
       } // layers.drums
       absBar++;
     }
@@ -941,6 +1037,7 @@ export class WebAudioEngine {
   private planRevision = 0;
   private onSampleNotice: ((msg: string | null) => void) | null = null;
   private lastStartStats: StartupStats = { prepMs: 0, banksQueued: 0, banksLoaded: 0, banksFailed: 0 };
+  private fxHandle: MasterFxHandle | null = null;
 
   get analyserNode(): AnalyserNode | null {
     return this.analyser;
@@ -969,16 +1066,17 @@ export class WebAudioEngine {
 
   private ensure(): AudioContext {
     if (this.ctx) return this.ctx;
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AC();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC({ latencyHint: "interactive" });
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.volume;
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
-    // Voices → master bus → gentle ceiling → analyzer → output. The ceiling
-    // only contains stacked peaks; normal levels pass through untouched.
+    // Master FX chain (reverb, delay, EQ) between master and limiter
+    const fxOut = this.ctx.createGain();
+    this.fxHandle = applyMasterEffects(this.ctx, this.master, fxOut, this.project?.effects);
     const limiter = masterLimiter(this.ctx);
-    this.master.connect(limiter);
+    fxOut.connect(limiter);
     limiter.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
     // noise buffer
@@ -1036,6 +1134,7 @@ export class WebAudioEngine {
     }
     this.stop(false);
     this.project = p;
+    if (this.fxHandle && p.effects) this.fxHandle.update(p.effects);
     this.pendingProject = null;
     this.planRevision++;
     this.loop = opts.loop ?? false;
@@ -1067,7 +1166,7 @@ export class WebAudioEngine {
     this.loopNoteIdx = this.noteIdx;
     this.loopDrumIdx = this.drumIdx;
     this.startOffset = 0;
-    this.startCtxTime = this.ctx!.currentTime + 0.06 - startAt;
+    this.startCtxTime = this.ctx!.currentTime + 0.035 - startAt;
     this.timer = setInterval(() => this.pump(), 25);
     this.pump();
     // Transport is audible from here: first events schedule within one pump
@@ -1120,6 +1219,7 @@ export class WebAudioEngine {
    * their banks asynchronously with synth cover until ready. */
   updateProject(p: SonicProject): void {
     this.project = p;
+    if (this.fxHandle && p.effects) this.fxHandle.update(p.effects);
     this.planRevision++;
     if (!this.song || !this.ctx) return;
     if (!this.isPlaying()) {
@@ -1129,6 +1229,16 @@ export class WebAudioEngine {
       return;
     }
     this.pendingProject = p;
+  }
+
+  /** Live master effects update without stopping or glitching playback. */
+  updateEffects(fx: MasterFxConfig): void {
+    if (this.project) {
+      this.project = { ...this.project, effects: fx };
+    }
+    if (this.fxHandle) {
+      this.fxHandle.update(fx);
+    }
   }
 
   /** Rebuild the event plan at the current transport position. */
@@ -1199,7 +1309,7 @@ export class WebAudioEngine {
       if (this.loop) {
         this.noteIdx = this.loopNoteIdx;
         this.drumIdx = this.loopDrumIdx;
-        this.startCtxTime = this.ctx.currentTime + 0.05 - this.playFrom;
+        this.startCtxTime = this.ctx.currentTime + 0.035 - this.playFrom;
         this.startOffset = 0;
       } else {
         this.stop(true);
@@ -1260,7 +1370,7 @@ export class WebAudioEngine {
 
   /** One-shot chord preview (no scheduler). Failures are preview-only:
    * logged for debugging, never surfaced — the transport owns error UI. */
-  async previewChord(symbol: string, octave = 3): Promise<void> {
+  async previewChord(symbol: string, octave = 3, voicing: ChordVoicing = "root"): Promise<void> {
     let ctx: AudioContext;
     try {
       ctx = this.ensure();
@@ -1273,11 +1383,52 @@ export class WebAudioEngine {
     // Warm the piano bank in the background; use it as soon as it's cached.
     warmSampleBanks(["grand-piano"], ctx);
     const pianoBank = sampleCache.has("grand-piano") ? "grand-piano" : undefined;
-    const midis = chordMidiNotes(symbol, octave);
+    const midis = chordMidiNotes(symbol, octave, voicing);
     const t = ctx.currentTime + 0.02;
     midis.forEach((m) => this.voice("piano", m, t, 1.4, 0.5, 0, pianoBank));
-    const root = chordMidiNotes(symbol, 1)[0] - 12;
+    const root = chordMidiNotes(symbol, 1, "root")[0] - 12;
     this.voice("bass", root, t, 1.4, 0.5, 0);
+  }
+
+  /**
+   * One-shot single note preview for interactive keyboard/fretboard auditioning.
+   */
+  async previewNote(midi: number, synth = "piano", duration = 0.9, vol = 0.6): Promise<void> {
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensure();
+      await ctx.resume();
+    } catch (e) {
+      console.warn("[SonicBlueprint:audio] preview note unavailable", e);
+      return;
+    }
+    if (ctx.state !== "running") return;
+    warmSampleBanks(["grand-piano"], ctx);
+    const bank = synth === "piano" ? (sampleCache.has("grand-piano") ? "grand-piano" : undefined) : undefined;
+    const t = ctx.currentTime + 0.01;
+    this.voice(synth, midi, t, duration, vol, 0, bank);
+  }
+
+  /**
+   * One-shot voicing preview with optional string strum stagger.
+   */
+  async previewVoicingNotes(midis: number[], synth = "piano", strumDelayMs = 28): Promise<void> {
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensure();
+      await ctx.resume();
+    } catch (e) {
+      console.warn("[SonicBlueprint:audio] preview voicing unavailable", e);
+      return;
+    }
+    if (ctx.state !== "running") return;
+    warmSampleBanks(["grand-piano"], ctx);
+    const bank = synth === "piano" ? (sampleCache.has("grand-piano") ? "grand-piano" : undefined) : undefined;
+    const t0 = ctx.currentTime + 0.01;
+    midis.forEach((m, idx) => {
+      const t = t0 + (idx * strumDelayMs) / 1000;
+      this.voice(synth, m, t, 1.2, 0.55, 0, bank);
+    });
   }
 
   /** One-bar drum preview (same timing + swing as the arrangement). */
@@ -1301,7 +1452,6 @@ export class WebAudioEngine {
     const steps = Number.isFinite(drumCfg.steps)
       ? Math.max(1, Math.min(64, Math.round(drumCfg.steps as number)))
       : 16;
-    const stepDur = barDur / steps;
     const swing = Number.isFinite(drumCfg.swing) ? Math.max(0, Math.min(0.9, drumCfg.swing as number)) : 0;
     const t0 = ctx.currentTime + 0.02;
     const grid = (drumCfg.grid ?? {}) as Record<string, unknown>;
@@ -1309,19 +1459,30 @@ export class WebAudioEngine {
     // Previews rotate takes on every press (preview-only salt; exports use
     // the deterministic event counters, never this).
     const salt = this.previewSalt++;
-    for (let s = 0; s < steps; s++) {
-      let tt = t0 + s * stepDur;
-      if (swing > 0 && s % 2 === 1) tt += stepDur * swing * 0.5;
-      for (const row of rows) {
-        const col = grid[row];
-        if (!Array.isArray(col) || col.length === 0) continue;
-        if (col[s % col.length]) this.drumVoice(row, tt, 0.9, salt + s);
+    for (const row of rows) {
+      const col = grid[row];
+      if (!Array.isArray(col) || col.length === 0) continue;
+      const rKey = row as DrumRow;
+      const rSteps = Number.isFinite(drumCfg.rowSteps?.[rKey])
+        ? Math.max(1, Math.min(64, Math.round(drumCfg.rowSteps![rKey]!)))
+        : steps;
+      const rCycle = Number.isFinite(drumCfg.rowCycles?.[rKey])
+        ? Math.max(1, Math.min(64, Math.round(drumCfg.rowCycles![rKey]!)))
+        : rSteps;
+      const rStepDur = barDur / rSteps;
+      for (let s = 0; s < rSteps; s++) {
+        const cycleIdx = s % rCycle;
+        if (col[cycleIdx % col.length]) {
+          let tt = t0 + s * rStepDur;
+          if (swing > 0 && s % 2 === 1) tt += rStepDur * swing * 0.5;
+          this.drumVoice(row, tt, 0.9, salt + s);
+        }
       }
     }
   }
 
   // ── synthesis ──
-  private voice(synth: string, midi: number, when: number, dur: number, vol: number, pan: number, sample?: string) {
+  private voice(synth: string, midi: number, when: number, dur: number, vol: number, pan: number, sample?: string, detune?: number) {
     if (!this.ctx || !this.master) return;
     const ctx = this.ctx;
     // Articulation + spatial profile resolve from the sampled bank when the
@@ -1340,12 +1501,13 @@ export class WebAudioEngine {
             shift: v.shift, dur: edur, vol: vol * (v.def.gain ?? 1) * v.weight, pan: effPan,
             attack: bankAttack(v.def), release: bankRelease(v.def),
             roomLevel: v.def.room ?? 0, brightness: vol,
+            detune,
           });
         }
         return;
       }
     }
-    const freq = midiToFreq(midi);
+    const freq = midiToFreq(midi) * (detune !== undefined ? centsToRatio(detune) : 1);
     const out = ctx.createGain();
     out.gain.value = Math.max(0.0001, Math.min(1, vol));
     let node: AudioNode = out;
@@ -1493,7 +1655,7 @@ export class WebAudioEngine {
   }
 
   private scheduleNote(n: NoteEvent, when: number) {
-    this.voice(n.synth, n.midi, when, n.dur, n.vol, n.pan, n.sample);
+    this.voice(n.synth, n.midi, when, n.dur, n.vol, n.pan, n.sample, n.detune);
   }
 
   private drumVoice(row: string, when: number, vol: number, rr = 0) {
@@ -1618,6 +1780,7 @@ interface OfflineVoice {
   vol: number;
   pan: number;
   sample?: string;
+  detune?: number | undefined;
 }
 
 interface OfflineDrum {
@@ -1635,7 +1798,7 @@ function scheduleSegment(
   drums: OfflineDrum[],
   mix: MixSwitches = MIX_ALL_ON
 ): void {
-  const voice = (synth: string, midi: number, when: number, dur: number, vol: number, pan: number, sample?: string) => {
+  const voice = (synth: string, midi: number, when: number, dur: number, vol: number, pan: number, sample?: string, detune?: number) => {
     // Mirrors realtime voice(): bank articulation/duration/pan apply first,
     // then sampled multisample or the identical synthesis fallback.
     const bankDef = sample !== undefined ? SAMPLE_BANKS[sample] : undefined;
@@ -1651,12 +1814,13 @@ function scheduleSegment(
             shift: v.shift, dur: edur, vol: vol * (v.def.gain ?? 1) * v.weight, pan: effPan,
             attack: bankAttack(v.def), release: bankRelease(v.def),
             roomLevel: mix.sampleRoom ? v.def.room ?? 0 : 0, brightness: vol,
+            detune,
           });
         }
         return;
       }
     }
-    const freq = midiToFreq(midi);
+    const freq = midiToFreq(midi) * (detune !== undefined ? centsToRatio(detune) : 1);
     const out = ctx.createGain();
     out.gain.value = Math.max(0.0001, Math.min(1, vol));
     let node: AudioNode = out;
@@ -1770,7 +1934,7 @@ function scheduleSegment(
     }
   };
 
-  for (const n of notes) voice(n.synth, n.midi, n.time, n.dur, n.vol, n.pan, n.sample);
+  for (const n of notes) voice(n.synth, n.midi, n.time, n.dur, n.vol, n.pan, n.sample, n.detune);
 
   const drum = (row: string, when: number, vol: number, rr = 0) => {
     // Mirrors realtime drumVoice; deterministic noise offset for stable exports.
@@ -1921,13 +2085,15 @@ export async function renderToAudioBuffer(
     const ctx = new OfflineAudioContext(2, segFrames, sr);
     const master = ctx.createGain();
     master.gain.value = 0.9;
+    const fxOut = ctx.createGain();
+    applyMasterEffects(ctx, master, fxOut, p.effects);
     // Same master chain as realtime: gentle limiter contains stacked peaks.
     if (mix.comp) {
       const limiter = masterLimiter(ctx);
-      master.connect(limiter);
+      fxOut.connect(limiter);
       limiter.connect(ctx.destination);
     } else {
-      master.connect(ctx.destination);
+      fxOut.connect(ctx.destination);
     }
     const noiseBuf = makeNoise(ctx, sr);
 

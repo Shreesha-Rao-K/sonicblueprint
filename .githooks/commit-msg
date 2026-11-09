@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# SonicBlueprint Conventional Commit Linter
+# ==============================================================================
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+MSG=$(head -n 1 "$COMMIT_MSG_FILE")
+
+CONVENTIONAL_PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_-]+\))?: .{1,80}$"
+
+if [[ ! "$MSG" =~ $CONVENTIONAL_PATTERN ]]; then
+  echo "❌ [Commit-Msg ERROR] Invalid commit message format."
+  echo "   Current:  \"$MSG\""
+  echo "   Expected: <type>(<scope>): <short description>"
+  echo "   Example:  feat(dsp): add stereo chorus effect node"
+  echo "   Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  exit 1
+fi

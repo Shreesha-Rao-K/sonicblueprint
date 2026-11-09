@@ -1,0 +1,111 @@
+WEBVTT - SonicBlueprint Desktop Studio Masterclass
+Kind: captions
+Language: en
+
+00:00:00.000 --> 00:00:05.000
+Welcome to SonicBlueprint, your professional in-browser digital audio workstation.
+
+00:00:05.000 --> 00:00:12.000
+SonicBlueprint runs entirely in your web browser with zero latency, zero installation, and complete offline capability.
+
+00:00:12.000 --> 00:00:19.000
+The top transport bar controls song playback, master tempo BPM, musical key tonic, and real-time audio synchronization.
+
+00:00:19.000 --> 00:00:25.000
+Notice the mix layer toggles: you can independently isolate or mute chords, drums, bass, and melody lines in real time.
+
+00:00:25.000 --> 00:00:33.000
+Now let's explore harmonic design in the Chord Editor. Choose from classical, modal, and extended jazz progressions.
+
+00:00:33.000 --> 00:00:42.000
+Here in E flat Dorian, our progression cycles through E flat minor 9, D flat major 9, C minor 9, and F minor 9.
+
+00:00:42.000 --> 00:00:52.000
+Using the Voicing selector, switch between Root position, First Inversion, Drop-2, and Open Spread voicings.
+
+00:00:52.000 --> 00:01:05.000
+Drop-2 voicings drop the second voice from the top down an octave, creating wide, open spacing favored by neo-soul and jazz arrangers.
+
+00:01:05.000 --> 00:01:15.000
+Click any chord chip to preview its harmonic sound. The visual piano and fretboard below display the active notes across registers.
+
+00:01:15.000 --> 00:01:25.000
+Tap Tempo lets you dial in natural tempos by tapping in rhythm. You can also drag the BPM slider smoothly without audio glitches.
+
+00:01:25.000 --> 00:01:35.000
+Moving down to the Drum Sequencer, we find an advanced poly-meter and polyrhythmic step grid.
+
+00:01:35.000 --> 00:01:45.000
+Each drum row—Kick, Snare, Hi-Hat, Percussion, and Clap—can operate on its own independent loop cycle length.
+
+00:01:45.000 --> 00:01:58.000
+For example, pairing a 4-step kick with a 3-step percussion and a 5-step clap yields a polyrhythm that naturally evolves across measures.
+
+00:01:58.000 --> 00:02:12.000
+The velocity accent row lets you punch individual steps with a twenty-five percent gain boost, injecting dynamic groove and swing.
+
+00:02:12.000 --> 00:02:25.000
+Adjust the Swing slider to apply subtle swing or aggressive shuffle feel to sixteenth notes without losing tempo sync.
+
+00:02:25.000 --> 00:02:35.000
+Next, let's shape our low-end foundation in the Bass and Arpeggiator panel.
+
+00:02:35.000 --> 00:02:48.000
+Choose between acoustic upright, modern electric, analog synth, or deep sub bass styles, each matched with specialized harmonic synthesis.
+
+00:02:48.000 --> 00:03:05.000
+The pattern arpeggiator transforms chord tones into rhythmic melodic motion. Select Up, Down, Up-Down, or As-Played patterns.
+
+00:03:05.000 --> 00:03:25.000
+Rate settings from quarter notes to sixteenth-note triplets sync flawlessly with the global transport clock.
+
+00:03:25.000 --> 00:03:45.000
+Notice how the bassline stays locked to the harmonic roots of your chords while the arpeggiator weaves melodic energy above it.
+
+00:03:45.000 --> 00:04:05.000
+You can adjust the octave register and volume balance to keep your bass sitting squarely in the pocket of the mix.
+
+00:04:05.000 --> 00:04:25.000
+Every tweak takes effect immediately during playback, allowing you to fine-tune your arrangement live.
+
+00:04:25.000 --> 00:04:35.000
+In the Instrument Mixer, you have complete control over multisampled instruments and virtual synthesis.
+
+00:04:35.000 --> 00:04:45.000
+Layer acoustic grand piano with warm analog pads, nylon guitar, solo cello, and string ensembles.
+
+00:04:45.000 --> 00:04:55.000
+Adjust per-instrument volume, stereo pan position, and register octave to build a spacious, balanced stereo field.
+
+00:04:55.000 --> 00:05:05.000
+Our multisample engine switches seamlessly between velocity layers for expressive acoustic dynamics.
+
+00:05:05.000 --> 00:05:15.000
+Now let's build a complete song in the Arrangement Timeline.
+
+00:05:15.000 --> 00:05:25.000
+Structure your track with Intro, Verse, Pre-Chorus, Chorus, Bridge, and Outro sections.
+
+00:05:25.000 --> 00:05:35.000
+Each section features a dedicated Energy slider from one to ten, which automatically automates arrangement density.
+
+00:05:35.000 --> 00:05:50.000
+Lower energy sections thin out instruments and soften drums, while high energy choruses trigger full instrumentation and accented beats.
+
+00:05:50.000 --> 00:06:05.000
+Reorder sections easily, duplicate verses, or click any section to start playback directly from that measure.
+
+00:06:05.000 --> 00:06:15.000
+Finally, let's polish our track with Master DSP Effects.
+
+00:06:15.000 --> 00:06:25.000
+Engage the hardware-modeled Bus Compressor with adjustable threshold, four-to-one ratio, and smooth sidechain ducking.
+
+00:06:25.000 --> 00:06:35.000
+Add depth with the Convolution Reverb hall algorithm, and space with tempo-synced Stereo Delay.
+
+00:06:35.000 --> 00:06:45.000
+When your track is ready, export lossless 16-bit 44.1kHz WAV, high-bitrate MP3 with ID3 tags, isolated stem archives, or shareable project URLs.
+
+00:06:45.000 --> 00:07:00.000
+Thank you for watching the SonicBlueprint Masterclass. Click 'Try in Studio' to load these project presets and start creating music now!

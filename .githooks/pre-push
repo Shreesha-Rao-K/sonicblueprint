@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# SonicBlueprint Pre-Push Quality Verification Hook
+# ==============================================================================
+set -euo pipefail
+echo "🔍 [Guardrail] Verifying quality gates prior to push..."
+npm run check:all
+echo "✅ [Guardrail] All verification checks passed. Push allowed."
+exit 0

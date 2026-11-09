@@ -1,5 +1,5 @@
 // Instrument + style catalogs — data-driven so the library grows without UI rewrites.
-import type { InstrumentGroupId } from "@/lib/project-schema";
+import type { InstrumentGroupId, BassStyleId } from "@/lib/project-schema";
 
 export interface InstrumentDef {
   group: InstrumentGroupId;
@@ -93,7 +93,7 @@ export interface QuickStart {
   scale: "major" | "minor";
   progressionId: string;
   drumId: string;
-  bassStyle: string;
+  bassStyle: BassStyleId;
   energy: number;
 }
 

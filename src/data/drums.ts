@@ -17,14 +17,15 @@ function mk(
   id: string, name: string, category: DrumPreset["category"],
   steps: number, description: string, bpmSuggestion: [number, number],
   paint: (grid: Record<DrumRow, boolean[]>) => void,
-  swing = 0
+  swing = 0,
+  rowCycles?: Partial<Record<DrumRow, number>>
 ): DrumPreset {
   return {
     id, name, category, steps, description, bpmSuggestion,
     build: () => {
       const grid = defaultDrumGrid(steps);
       paint(grid);
-      return { patternId: id, steps, grid, swing, velocity: 0.9 };
+      return { patternId: id, steps, grid, swing, velocity: 0.9, ...(rowCycles ? { rowCycles } : {}) };
     },
   };
 }
@@ -149,6 +150,19 @@ export const DRUM_PRESETS: DrumPreset[] = [
     for (let i = 0; i < 12; i += 2) g.shaker[i] = true;
     g.perc[3] = g.perc[9] = true;
   }),
+  mk("polyrhythm-3-4", "3:4 Polyrhythm Pulse", "Electronic Pop", 16, "Four-floor kick with an independent 3-step repeating perc polymeter and 5-step clap.", [115, 130], (g) => {
+    [0, 4, 8, 12].forEach((i) => (g.kick[i] = true));
+    [4, 12].forEach((i) => (g.snare[i] = true));
+    for (let i = 0; i < 16; i += 2) g.hihat[i] = true;
+    g.perc[0] = true;
+    g.clap[0] = true;
+  }, 0, { perc: 3, clap: 5 }),
+  mk("polyrhythm-3-2", "3:2 Afro-Latin Groove", "Minimal", 16, "Two-step bass pulse against three-step shaker cycle for classic 3:2 syncopation.", [95, 115], (g) => {
+    [0, 8].forEach((i) => (g.kick[i] = true));
+    [4, 12].forEach((i) => (g.snare[i] = true));
+    g.shaker[0] = true;
+    g.perc[0] = true;
+  }, 0.05, { shaker: 3, kick: 2 }),
 ];
 
 export const DRUM_CATEGORIES = [

@@ -1,10 +1,17 @@
-// ── Project schema v4: versioned JSON, defaults, validation ──
+// ── Project schema v5: versioned JSON, defaults, validation ──
 // v1: original release. v2: layer toggles (migrated ON). v3: version history.
 // v4: performance humanization preference (defaults to subtle = legacy sound).
+// v5: master effects (reverb, delay, EQ) with safe neutral bypass defaults.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 import { normalizeLevel, type HumanizeLevel } from "./humanize";
+import {
+  defaultMasterFx,
+  normalizeMasterFx,
+  type MasterFxConfig,
+} from "./audio-effects";
+import type { ArpeggiatorConfig } from "./arpeggiator";
 
 /** Cap on stored versions per project: full snapshots are ~3KB each, so 20
  * versions stay well under 100KB — trivial for IndexedDB and JSON backups. */
@@ -38,13 +45,26 @@ export function getLayers(p: SonicProject): LayerState {
 }
 
 export type TimeSignature = "4/4" | "3/4" | "6/8" | "12/8";
-export type ScaleKind = "major" | "minor";
+export type ScaleKind =
+  | "major"
+  | "minor"
+  | "dorian"
+  | "mixolydian"
+  | "phrygian"
+  | "lydian"
+  | "harmonicMinor"
+  | "pentMajor"
+  | "pentMinor"
+  | "blues";
+
+export type ChordVoicing = "root" | "firstInversion" | "secondInversion" | "thirdInversion" | "open" | "drop2" | "drop3" | "spread";
 
 export interface ChordConfig {
   progressionId: string;
   chords: string[]; // e.g. ["Dm","Bb","F","C"]
   beatsPerChord: number; // default 4
   octave: number;
+  voicing?: ChordVoicing;
 }
 
 export type DrumRow = "kick" | "snare" | "hihat" | "openhat" | "clap" | "perc" | "tom" | "shaker";
@@ -54,6 +74,12 @@ export interface DrumConfig {
   grid: Record<DrumRow, boolean[]>; // length === steps
   swing: number; // 0..0.6
   velocity: number; // 0..1 master humanize base
+  accents?: boolean[] | undefined;
+  /** Independent cycle lengths per drum row (e.g. { perc: 3, clap: 5, kick: 4 })
+   * for continuous polymeter and polyrhythms without timing drift. */
+  rowCycles?: Partial<Record<DrumRow, number>> | undefined;
+  /** Independent subdivisions/steps-per-bar per drum row (e.g. { perc: 12, kick: 16 }). */
+  rowSteps?: Partial<Record<DrumRow, number>> | undefined;
 }
 
 export type BassStyleId =
@@ -82,6 +108,7 @@ export interface InstrumentSlot {
   role: "chords" | "melody" | "arp" | "pad" | "bass" | "lead" | "texture";
   style: string; // free-form style tag e.g. "soft", "bright"
   patternVariant: string; // e.g. "block", "broken", "arp-up"
+  arpeggiator?: ArpeggiatorConfig | undefined;
 }
 
 export interface ArrangementSection {
@@ -139,6 +166,9 @@ export interface SonicProject {
   /** Deliberate saved snapshots ("Save Version"). Optional on stored data so
    * v1/v2 projects load; always present after normalizeProject. */
   versions?: ProjectVersion[];
+  /** Master effects (reverb, delay, EQ) settings. Optional on stored data so
+   * v1–v4 projects load; always present with safe neutral defaults after normalizeProject. */
+  effects?: MasterFxConfig;
 }
 
 /** A deliberate snapshot of a project: full copy of the musical state (never
@@ -156,24 +186,30 @@ export interface ProjectVersion {
 /** The musical state inside a version: a whole project minus its history. */
 export type ProjectSnapshot = Omit<SonicProject, "versions">;
 
-/** Bring any stored project (v1–v4) up to the current schema.
+/** Bring any stored project (v1–v5) up to the current schema.
  * v1 projects predate layer toggles, so every layer defaults ON.
  * v1/v2 projects predate version history, so they start with no versions.
  * v1–v3 projects predate the feel preference, so it defaults to "subtle"
- * (the historical sound, bit for bit). */
+ * (the historical sound, bit for bit).
+ * v1–v4 projects predate master effects, so they default bypassed (identical sound). */
 export function normalizeProject(p: SonicProject): SonicProject {
-  const rawVersions = Array.isArray(p.versions) ? p.versions : [];
+  const rawVersions: unknown[] = Array.isArray(p.versions) ? p.versions : [];
   const versions: ProjectVersion[] = rawVersions
-    .filter((v) => isRecord(v))
-    .map((v) => {
-      const rec = { ...(v as Record<string, unknown>) };
-      // Snapshots never nest: strip any versions smuggled inside.
-      if (isRecord(rec["snapshot"])) {
-        const snap = { ...(rec["snapshot"] as Record<string, unknown>) };
+    .filter((v): v is Record<string, unknown> => isRecord(v))
+    .map((rec) => {
+      let snapshot = rec["snapshot"];
+      if (isRecord(snapshot)) {
+        const snap: Record<string, unknown> = { ...snapshot };
         delete snap["versions"];
-        rec["snapshot"] = snap;
+        snapshot = snap;
       }
-      return rec as unknown as ProjectVersion;
+      return {
+        id: typeof rec["id"] === "string" ? rec["id"] : uid("ver"),
+        createdAt: typeof rec["createdAt"] === "string" ? rec["createdAt"] : new Date().toISOString(),
+        label: typeof rec["label"] === "string" ? rec["label"] : "Snapshot",
+        versionNumber: typeof rec["versionNumber"] === "number" ? rec["versionNumber"] : 1,
+        snapshot: snapshot as ProjectSnapshot,
+      };
     })
     .slice(-MAX_VERSIONS);
   return {
@@ -182,6 +218,16 @@ export function normalizeProject(p: SonicProject): SonicProject {
     layers: getLayers(p),
     versions,
     config: { ...p.config, humanize: normalizeLevel(p.config?.humanize) },
+    effects: normalizeMasterFx(p.effects),
+    chords: {
+      ...p.chords,
+      voicing: (p.chords?.voicing && CHORD_VOICINGS.includes(p.chords.voicing) ? p.chords.voicing : "root") as ChordVoicing,
+    },
+    drums: {
+      ...p.drums,
+      rowCycles: p.drums?.rowCycles ? { ...p.drums.rowCycles } : undefined,
+      rowSteps: p.drums?.rowSteps ? { ...p.drums.rowSteps } : undefined,
+    },
   };
 }
 
@@ -267,6 +313,7 @@ export function createProject(name = "Untitled Blueprint", seed?: Partial<SonicP
     arrangement: seed?.arrangement ?? defaultArrangement(),
     layers: { ...defaultLayers(), ...(seed?.layers ?? {}) },
     versions: seed?.versions ? [...seed.versions] : [],
+    effects: seed?.effects ? normalizeMasterFx(seed.effects) : defaultMasterFx(),
     originality: {
       usesImportedRecording: false,
       usesCommercialSample: false,
@@ -291,7 +338,7 @@ export function beatsPerBar(ts: TimeSignature): number {
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 function isFiniteNumber(v: unknown): v is number {
@@ -306,7 +353,19 @@ function isSaneString(v: unknown, maxLen: number, allowEmpty = false): v is stri
 }
 
 const TIME_SIGNATURES = ["4/4", "3/4", "6/8", "12/8"];
-const SCALES = ["major", "minor"];
+const SCALES = [
+  "major",
+  "minor",
+  "dorian",
+  "mixolydian",
+  "phrygian",
+  "lydian",
+  "harmonicMinor",
+  "pentMajor",
+  "pentMinor",
+  "blues",
+];
+const CHORD_VOICINGS = ["root", "firstInversion", "secondInversion", "thirdInversion", "open", "drop2", "drop3", "spread"];
 const HUMANIZE_LEVELS = ["off", "subtle", "natural", "expressive"];
 const BASS_STYLES = ["root", "octave", "sustained", "rhythmic", "arp", "sub", "electronic", "custom"];
 const INSTRUMENT_GROUPS = [
@@ -359,6 +418,24 @@ function isValidDrums(drums: unknown): boolean {
       if (col.some((v) => typeof v !== "boolean")) return false;
     }
   }
+  if (drums["accents"] !== undefined) {
+    if (!Array.isArray(drums["accents"]) || (drums["accents"] as unknown[]).length > 256) return false;
+    if ((drums["accents"] as unknown[]).some((v) => typeof v !== "boolean")) return false;
+  }
+  if (drums["rowCycles"] !== undefined) {
+    if (!isRecord(drums["rowCycles"])) return false;
+    for (const [k, v] of Object.entries(drums["rowCycles"] as Record<string, unknown>)) {
+      if (!DRUM_ROWS.includes(k as DrumRow)) continue;
+      if (!isFiniteNumber(v) || (v as number) < 1 || (v as number) > 64) return false;
+    }
+  }
+  if (drums["rowSteps"] !== undefined) {
+    if (!isRecord(drums["rowSteps"])) return false;
+    for (const [k, v] of Object.entries(drums["rowSteps"] as Record<string, unknown>)) {
+      if (!DRUM_ROWS.includes(k as DrumRow)) continue;
+      if (!isFiniteNumber(v) || (v as number) < 1 || (v as number) > 64) return false;
+    }
+  }
   return true;
 }
 
@@ -386,6 +463,33 @@ function isValidInstrument(entry: unknown): boolean {
   if (typeof entry["role"] !== "string" || !INSTRUMENT_ROLES.includes(entry["role"])) return false;
   if (!isSaneString(entry["style"], 128)) return false;
   if (!isSaneString(entry["patternVariant"], 128)) return false;
+  if (entry["arpeggiator"] !== undefined) {
+    if (!isRecord(entry["arpeggiator"])) return false;
+    const arp = entry["arpeggiator"];
+    if (arp["enabled"] !== undefined && typeof arp["enabled"] !== "boolean") return false;
+    if (
+      arp["pattern"] !== undefined &&
+      (typeof arp["pattern"] !== "string" ||
+        !["up", "down", "upDown", "random", "asPlayed"].includes(arp["pattern"] as string))
+    )
+      return false;
+    if (
+      arp["rate"] !== undefined &&
+      (typeof arp["rate"] !== "string" ||
+        !["1/4", "1/8", "1/16", "1/8t", "1/16t"].includes(arp["rate"] as string))
+    )
+      return false;
+    if (
+      arp["octaves"] !== undefined &&
+      (!isFiniteNumber(arp["octaves"]) || (arp["octaves"] as number) < 1 || (arp["octaves"] as number) > 3)
+    )
+      return false;
+    if (
+      arp["gate"] !== undefined &&
+      (!isFiniteNumber(arp["gate"]) || (arp["gate"] as number) < 0.1 || (arp["gate"] as number) > 1.0)
+    )
+      return false;
+  }
   return true;
 }
 
@@ -435,6 +539,57 @@ function isValidOriginality(originality: unknown): boolean {
   return true;
 }
 
+function isValidEffects(fx: unknown): boolean {
+  if (!isRecord(fx)) return false;
+  const rev = fx["reverb"];
+  if (rev !== undefined) {
+    if (!isRecord(rev)) return false;
+    if (rev["enabled"] !== undefined && typeof rev["enabled"] !== "boolean") return false;
+    if (rev["decay"] !== undefined && (!isFiniteNumber(rev["decay"]) || (rev["decay"] as number) < 0.1 || (rev["decay"] as number) > 10)) return false;
+    if (rev["mix"] !== undefined && (!isFiniteNumber(rev["mix"]) || (rev["mix"] as number) < 0 || (rev["mix"] as number) > 1)) return false;
+    if (rev["tone"] !== undefined && (!isFiniteNumber(rev["tone"]) || (rev["tone"] as number) < 100 || (rev["tone"] as number) > 20000)) return false;
+  }
+  const del = fx["delay"];
+  if (del !== undefined) {
+    if (!isRecord(del)) return false;
+    if (del["enabled"] !== undefined && typeof del["enabled"] !== "boolean") return false;
+    if (del["time"] !== undefined && (!isFiniteNumber(del["time"]) || (del["time"] as number) < 0.01 || (del["time"] as number) > 5)) return false;
+    if (del["feedback"] !== undefined && (!isFiniteNumber(del["feedback"]) || (del["feedback"] as number) < 0 || (del["feedback"] as number) > 1)) return false;
+    if (del["mix"] !== undefined && (!isFiniteNumber(del["mix"]) || (del["mix"] as number) < 0 || (del["mix"] as number) > 1)) return false;
+  }
+  const eq = fx["eq"];
+  if (eq !== undefined) {
+    if (!isRecord(eq)) return false;
+    if (eq["enabled"] !== undefined && typeof eq["enabled"] !== "boolean") return false;
+    if (eq["lowGain"] !== undefined && (!isFiniteNumber(eq["lowGain"]) || Math.abs(eq["lowGain"] as number) > 24)) return false;
+    if (eq["midGain"] !== undefined && (!isFiniteNumber(eq["midGain"]) || Math.abs(eq["midGain"] as number) > 24)) return false;
+    if (eq["highGain"] !== undefined && (!isFiniteNumber(eq["highGain"]) || Math.abs(eq["highGain"] as number) > 24)) return false;
+  }
+  const mod = fx["modulation"];
+  if (mod !== undefined) {
+    if (!isRecord(mod)) return false;
+    if (mod["enabled"] !== undefined && typeof mod["enabled"] !== "boolean") return false;
+    if (mod["type"] !== undefined && (typeof mod["type"] !== "string" || !["chorus", "flanger"].includes(mod["type"] as string))) return false;
+    if (mod["rate"] !== undefined && (!isFiniteNumber(mod["rate"]) || (mod["rate"] as number) < 0.05 || (mod["rate"] as number) > 20)) return false;
+    if (mod["depth"] !== undefined && (!isFiniteNumber(mod["depth"]) || (mod["depth"] as number) < 0 || (mod["depth"] as number) > 1)) return false;
+    if (mod["feedback"] !== undefined && (!isFiniteNumber(mod["feedback"]) || (mod["feedback"] as number) < 0 || (mod["feedback"] as number) > 1)) return false;
+    if (mod["mix"] !== undefined && (!isFiniteNumber(mod["mix"]) || (mod["mix"] as number) < 0 || (mod["mix"] as number) > 1)) return false;
+  }
+  const comp = fx["compressor"];
+  if (comp !== undefined) {
+    if (!isRecord(comp)) return false;
+    if (comp["enabled"] !== undefined && typeof comp["enabled"] !== "boolean") return false;
+    if (comp["threshold"] !== undefined && (!isFiniteNumber(comp["threshold"]) || (comp["threshold"] as number) < -100 || (comp["threshold"] as number) > 10)) return false;
+    if (comp["knee"] !== undefined && (!isFiniteNumber(comp["knee"]) || (comp["knee"] as number) < 0 || (comp["knee"] as number) > 50)) return false;
+    if (comp["ratio"] !== undefined && (!isFiniteNumber(comp["ratio"]) || (comp["ratio"] as number) < 1 || (comp["ratio"] as number) > 50)) return false;
+    if (comp["attack"] !== undefined && (!isFiniteNumber(comp["attack"]) || (comp["attack"] as number) < 0.0001 || (comp["attack"] as number) > 1)) return false;
+    if (comp["release"] !== undefined && (!isFiniteNumber(comp["release"]) || (comp["release"] as number) < 0.01 || (comp["release"] as number) > 5)) return false;
+    if (comp["makeupGain"] !== undefined && (!isFiniteNumber(comp["makeupGain"]) || (comp["makeupGain"] as number) < 0 || (comp["makeupGain"] as number) > 36)) return false;
+    if (comp["autoMakeup"] !== undefined && typeof comp["autoMakeup"] !== "boolean") return false;
+  }
+  return true;
+}
+
 export function validateProject(p: unknown): p is SonicProject {
   return validateProjectInner(p, 0);
 }
@@ -458,8 +613,16 @@ function validateVersions(v: unknown, depth: number): v is ProjectVersion[] {
 function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   if (!isRecord(p)) return false;
   // v1 projects predate layer toggles, v1–v3 predate version history and the
-  // feel preference; all three are migrated on load.
-  if (p["schemaVersion"] !== 1 && p["schemaVersion"] !== 2 && p["schemaVersion"] !== 3 && p["schemaVersion"] !== SCHEMA_VERSION) return false;
+  // feel preference, v1–v4 predate master effects; all four are migrated on load.
+  if (
+    p["schemaVersion"] !== 1 &&
+    p["schemaVersion"] !== 2 &&
+    p["schemaVersion"] !== 3 &&
+    p["schemaVersion"] !== 4 &&
+    p["schemaVersion"] !== SCHEMA_VERSION
+  ) {
+    return false;
+  }
   // typeof null === "object", so null sections must be rejected explicitly.
   const meta = p["meta"];
   const config = p["config"];
@@ -469,6 +632,11 @@ function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   // Layer flags are optional (v1 predates them) but present flags must be
   // booleans — a "yes" string must not silently mean ON downstream.
   if (p["layers"] !== undefined && !isValidLayers(p["layers"])) {
+    return false;
+  }
+
+  // Master effects are optional (v1–v4 predate them) but must be well-formed when present.
+  if (p["effects"] !== undefined && !isValidEffects(p["effects"])) {
     return false;
   }
 
@@ -498,6 +666,9 @@ function validateProjectInner(p: unknown, depth: number): p is SonicProject {
   }
   if (!isSaneString(chords["progressionId"], 256)) return false;
   if (!isFiniteNumber(chords["octave"])) return false;
+  if (chords["voicing"] !== undefined && (typeof chords["voicing"] !== "string" || !CHORD_VOICINGS.includes(chords["voicing"] as string))) {
+    return false;
+  }
 
   if (!isValidDrums(p["drums"])) return false;
 

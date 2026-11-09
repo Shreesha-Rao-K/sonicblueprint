@@ -6,6 +6,7 @@ import { Play, Pause, Square, SkipBack, Repeat, Volume2, VolumeX } from "lucide-
 import { getEngine, describeAudioError } from "@/lib/audio-engine";
 import { useProjectStore, useTransportStore } from "@/store/project-store";
 import { Button } from "./ui";
+import { VuMeter } from "./VuMeter";
 import { cn } from "@/lib/cn";
 
 function fmt(sec: number): string {
@@ -68,7 +69,14 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
       for (let i = 0; i < n; i++) {
         const v = data ? data[Math.floor((i / n) * data.length * 0.7)] / 255 : 0.15;
         const h = Math.max(2, v * c.height);
-        g.fillStyle = playing && !staticBars ? "#6e8bff" : "#2a3a6b";
+        let activeColor = "#00f3ff";
+        let unlitColor = "#262d47";
+        if (typeof window !== "undefined") {
+          const cs = window.getComputedStyle(document.documentElement);
+          activeColor = cs.getPropertyValue("--meter-rms").trim() || activeColor;
+          unlitColor = cs.getPropertyValue("--meter-bg").trim() || unlitColor;
+        }
+        g.fillStyle = playing && !staticBars ? activeColor : unlitColor;
         g.fillRect(i * bw + 1, c.height - h, bw - 2, h);
       }
     };
@@ -96,7 +104,6 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
     if (engine.hasSong()) engine.updateProject(liveProject);
   }, [liveProject]);
 
-  if (!projectId) return null;
   const eng = getEngine();
   const starting = audio === "starting";
 
@@ -156,12 +163,22 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
     }
   };
 
+  useEffect(() => {
+    const onToggle = () => {
+      void toggle();
+    };
+    window.addEventListener("sonic:toggle-playback", onToggle);
+    return () => window.removeEventListener("sonic:toggle-playback", onToggle);
+  });
+
   const stop = () => {
     eng.stop(true);
     setT({ playing: false, positionSec: 0, chordIndex: 0, sectionIndex: 0, audio: "idle", audioError: null });
   };
 
   const progress = durationSec > 0 ? Math.min(1, positionSec / durationSec) : 0;
+
+  if (!projectId) return null;
 
   return (
     <div className="glass sticky top-0 z-30 border-b border-[#1e2a4a] px-4 py-2.5" role="region" aria-label="Playback controls">
@@ -191,7 +208,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
             title={loop ? "Stop repeating" : "Repeat the song from the start"}
             aria-pressed={loop}
             onClick={() => setT({ loop: !loop })}
-            className={cn(loop && "bg-[#6e8bff]/20 text-white")}
+            className={cn(loop && "bg-[var(--accent-primary)]/20 text-white")}
           >
             <Repeat className="h-4 w-4" />
           </Button>
@@ -212,17 +229,20 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
         {audio !== "error" && sampleNote ? (
           <div className="flex min-w-[200px] flex-1 items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400" role="status">
             <span className="min-w-0 flex-1">{sampleNote}</span>
-            <button onClick={toggle} className="shrink-0 font-semibold text-[#aebfff] underline underline-offset-2 hover:text-white">
+            <button onClick={toggle} className="shrink-0 font-semibold text-[var(--accent-primary)] underline underline-offset-2 hover:text-white">
               Retry
             </button>
           </div>
         ) : null}
 
-        <div className="relative h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-[#1a2340]" role="progressbar" aria-label="How far through the song" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#6e8bff] to-[#a78bfa]" style={{ width: `${progress * 100}%` }} />
+        <div className="relative h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-[var(--bg-input)] border border-[var(--border-subtle)]" role="progressbar" aria-label="How far through the song" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
+          <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]" style={{ width: `${progress * 100}%` }} />
         </div>
 
-        <canvas ref={canvasRef} width={160} height={28} className="hidden h-7 w-40 opacity-90 lg:block" aria-hidden="true" />
+        <canvas ref={canvasRef} width={160} height={28} className="hidden h-7 w-40 opacity-90 xl:block" aria-hidden="true" />
+        <div className="hidden lg:flex items-center">
+          <VuMeter showLabels={false} />
+        </div>
 
         <div className="flex items-center gap-2">
           <label className="sr-only" htmlFor="human-feel">Human feel</label>
@@ -231,7 +251,7 @@ export function TransportBar({ fromSectionId }: { fromSectionId?: string | null 
             value={feel}
             onChange={(e) => useProjectStore.getState().update((p) => ({ ...p, config: { ...p.config, humanize: e.target.value as "off" | "subtle" | "natural" | "expressive" } }))}
             title="How performed it sounds — Off is exact, Subtle is the classic feel, Natural adds human timing"
-            className="h-10 rounded-lg border border-[#26325a] bg-[#0a0e1a] px-2 text-[13px] text-slate-200 focus:border-[#6e8bff]"
+            className="h-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-input)] px-2 text-[13px] text-[var(--text-primary)] focus:border-[var(--border-focus)]"
           >
             <option value="off">Exact</option>
             <option value="subtle">Human: subtle</option>

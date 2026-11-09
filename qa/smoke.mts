@@ -53,6 +53,7 @@ async function main(): Promise<void> {
   await page("/projects", "Project");
   await page("/settings", "Setting");
   await page("/sample-qa", "Sample QA");
+  await page("/studio/share", "Shared Blueprint");
   await page("/sitemap.xml", "<url>");
   await page("/robots.txt", "sitemap");
 

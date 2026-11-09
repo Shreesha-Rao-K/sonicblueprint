@@ -35,14 +35,81 @@ export const metadata: Metadata = {
 
 const structuredData = {
   "@context": "https://schema.org",
-  "@type": "WebApplication",
-  name: "SonicBlueprint",
-  applicationCategory: "MusicApplication",
-  operatingSystem: "Web",
-  browserRequirements: "Requires a modern browser with Web Audio support",
-  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  description:
-    "Browser-based music composition tool for building chord progressions, drum patterns and arrangements, with MP3, MIDI and PDF export.",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": "https://sonicblueprint.dev/#webapp",
+      name: "SonicBlueprint",
+      url: "https://sonicblueprint.dev",
+      applicationCategory: "MultimediaApplication",
+      operatingSystem: "Any",
+      browserRequirements: "Requires a modern browser with Web Audio API support",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+      featureList: [
+        "Interactive 8x16 Drum Sequencer",
+        "Chord Progression Studio with Voice Leading",
+        "Arrangement Timeline and Multi-Track Mixer",
+        "Browser-based WAV, MIDI, and PDF Export",
+        "Offline PWA with Client-side Audio Synthesis",
+        "Full WCAG 2.1 AA Keyboard and Screen Reader Accessibility",
+      ],
+      description:
+        "Browser-based music composition tool for building chord progressions, drum patterns, and arrangements with real-time audio playback, MIDI, and WAV export.",
+      publisher: {
+        "@id": "https://sonicblueprint.dev/#organization",
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://sonicblueprint.dev/#organization",
+      name: "SonicBlueprint",
+      url: "https://sonicblueprint.dev",
+      logo: "https://sonicblueprint.dev/icon-512.png",
+      sameAs: ["https://github.com/sonicblueprint/sonicblueprint"],
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://sonicblueprint.dev/#faq",
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "What is SonicBlueprint?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "SonicBlueprint is an open-source, in-browser digital audio workstation (DAW) and chord progression studio built with Next.js, Web Audio API, and WebAssembly.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Is SonicBlueprint free to use?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Yes, SonicBlueprint is completely free and open-source under the MIT license, with no account, paywall, or subscription required.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Can I export audio and MIDI from SonicBlueprint?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Yes, you can export your compositions as WAV audio files, standard MIDI files (.mid), or complete SonicBlueprint project JSON archives.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Does SonicBlueprint run offline?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Yes, SonicBlueprint works offline as a Progressive Web App (PWA) with client-side synthesis and sample caching.",
+          },
+        },
+      ],
+    },
+  ],
 };
 
 export default function LandingPage() {
@@ -178,6 +245,37 @@ export default function LandingPage() {
             <Link href="/dashboard" className="rounded-lg bg-[#6e8bff] px-6 py-3 font-semibold text-[#0b1020] hover:bg-[#7f99ff]">Open Dashboard</Link>
             <Link href="/projects" className="rounded-lg border border-[#2a3a6b] px-6 py-3 font-semibold hover:border-[#6e8bff]">Saved Projects</Link>
           </div>
+        </section>
+
+        <section className="mt-16 rounded-2xl border border-[#1e2a4a] bg-[#0e1424]/90 p-8">
+          <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Frequently Asked Questions</h2>
+          <p className="mt-2 text-sm text-slate-400">Learn how SonicBlueprint works, its open-source license, export capabilities, and offline support.</p>
+          <dl className="mt-8 grid gap-6 md:grid-cols-2">
+            <div className="rounded-xl border border-[#1e2a4a] bg-black/30 p-5">
+              <dt className="text-base font-bold text-[#aebfff]">What is SonicBlueprint?</dt>
+              <dd className="mt-2 text-sm leading-relaxed text-slate-300">
+                SonicBlueprint is an open-source, in-browser digital audio workstation (DAW) and chord progression studio built with Next.js, Web Audio API, and WebAssembly.
+              </dd>
+            </div>
+            <div className="rounded-xl border border-[#1e2a4a] bg-black/30 p-5">
+              <dt className="text-base font-bold text-[#aebfff]">Is SonicBlueprint free to use?</dt>
+              <dd className="mt-2 text-sm leading-relaxed text-slate-300">
+                Yes, SonicBlueprint is completely free and open-source under the MIT license, with no account, paywall, or subscription required.
+              </dd>
+            </div>
+            <div className="rounded-xl border border-[#1e2a4a] bg-black/30 p-5">
+              <dt className="text-base font-bold text-[#aebfff]">Can I export audio and MIDI from SonicBlueprint?</dt>
+              <dd className="mt-2 text-sm leading-relaxed text-slate-300">
+                Yes, you can export your compositions as WAV audio files, standard MIDI files (.mid), or complete SonicBlueprint project JSON archives.
+              </dd>
+            </div>
+            <div className="rounded-xl border border-[#1e2a4a] bg-black/30 p-5">
+              <dt className="text-base font-bold text-[#aebfff]">Does SonicBlueprint run offline?</dt>
+              <dd className="mt-2 text-sm leading-relaxed text-slate-300">
+                Yes, SonicBlueprint works offline as a Progressive Web App (PWA) with client-side synthesis and sample caching.
+              </dd>
+            </div>
+          </dl>
         </section>
       </main>
     </div>

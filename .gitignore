@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# agent skills cache
+/skills/
+
+# video narration intermediate audio
+/videos/audio/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

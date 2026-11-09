@@ -5,7 +5,7 @@
 // progression instead of restarting it.
 import type { SonicProject } from "./project-schema";
 import { getLayers } from "./project-schema";
-import { chordMidiNotes, generateMelody, rootToPc } from "./music-theory";
+import { chordMidiNotes, generateMelody, rootToPc, type ScaleKind } from "./music-theory";
 import { MELODY_STYLES } from "@/data/styles";
 import {
   beatSecOf,
@@ -22,13 +22,13 @@ export async function exportMidi(p: SonicProject): Promise<Blob> {
   const bpm = normalizeBpm(p.config?.bpm);
   midi.header.setTempo(bpm);
   const [num, den] = String(p.config.timeSignature ?? "4/4").split("/").map(Number);
-  midi.header.timeSignatures.push({ ticks: 0, timeSignature: [num || 4, den || 4] as unknown as [number, number], measures: 0 });
+  midi.header.timeSignatures.push({ ticks: 0, timeSignature: [num || 4, den || 4] as [number, number], measures: 0 });
   midi.header.update();
 
   const spq = beatSecOf(p);
   const qpb = quarterBeatsOf(p.config?.timeSignature ?? "4/4");
   const tonicPc = rootToPc(p.config.keyTonic);
-  const scaleKind = p.config.scale === "major" ? "major" : "minor";
+  const scaleKind = (p.config.scale as ScaleKind) ?? "minor";
   const density = MELODY_STYLES.find((m) => m.id === p.melodyStyle)?.density ?? 0.6;
 
   const chordsTrack = midi.addTrack();
@@ -58,7 +58,7 @@ export async function exportMidi(p: SonicProject): Promise<Blob> {
     const idx = slot.chordIdx;
     const secIdx = slot.sectionIdx;
     if (layers.chords) {
-      for (const m of chordMidiNotes(sym, p.chords.octave)) {
+      for (const m of chordMidiNotes(sym, p.chords.octave, p.chords.voicing)) {
         chordsTrack.addNote({ midi: m, time: start, duration: dur * 0.95, velocity: 0.7 });
       }
     }

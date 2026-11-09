@@ -22,6 +22,22 @@ import "./song-events.test.js";
 import "./layers.test.js";
 import "./security.test.js";
 import "./exports.test.js";
+import "./wav-export.test.js";
+import "./master-effects.test.js";
+import "./stem-export.test.js";
+import "./share-url.test.js";
+import "./polyrhythm.test.js";
+import "./zeroize.test.js";
+import "./sanitize.test.js";
+import "./id3-tag.test.js";
+import "./microtonal.test.js";
+import "./arpeggiator.test.js";
+import "./theme.test.js";
+import "./fretboard.test.js";
+import "./micro-interactions.test.js";
+import "./mobile-ergonomics.test.js";
+import "./tutorials.test.js";
+import "./a11y.test.js";
 
 async function main(): Promise<void> {
   const cases = getCases();

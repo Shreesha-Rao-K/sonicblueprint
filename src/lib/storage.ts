@@ -3,6 +3,8 @@
 
 import type { SonicProject } from "./project-schema";
 import { validateProject } from "./project-schema";
+import { sanitizeProjectForStorage } from "./security/sanitize";
+import { secureWipeStorage } from "./security/zeroize";
 
 const DB_NAME = "sonicblueprint";
 const STORE = "projects";
@@ -72,20 +74,21 @@ export function mergeProjectLists(idbItems: unknown[], lsItems: unknown[]): Soni
 }
 
 export async function saveProject(p: SonicProject): Promise<void> {
+  const clean = sanitizeProjectForStorage(p);
   try {
-    await tx((s) => s.put(p as unknown as Record<string, unknown>));
+    await tx((s) => s.put(clean));
   } catch {
     try {
-      localStorage.setItem(`sb:project:${p.meta.id}`, JSON.stringify(p));
+      localStorage.setItem(`sb:project:${clean.meta.id}`, JSON.stringify(clean));
     } catch {
       /* storage full — ignore, export still works */
     }
   }
   try {
     const idx = JSON.parse(localStorage.getItem(META_KEY) ?? "[]") as string[];
-    const next = [p.meta.id, ...idx.filter((x) => x !== p.meta.id)].slice(0, 60);
+    const next = [clean.meta.id, ...idx.filter((x) => x !== clean.meta.id)].slice(0, 60);
     localStorage.setItem(META_KEY, JSON.stringify(next));
-    localStorage.setItem("sb:last-edited", p.meta.id);
+    localStorage.setItem("sb:last-edited", clean.meta.id);
   } catch {
     /* ignore */
   }
@@ -106,7 +109,7 @@ export async function listProjects(): Promise<SonicProject[]> {
   // empty IDB list so localStorage-only projects stay visible regardless.
   let idbItems: unknown[] = [];
   try {
-    const all = await tx<unknown[]>((s) => s.getAll() as unknown as IDBRequest<unknown[]>);
+    const all = await tx<unknown[]>((s) => s.getAll());
     if (Array.isArray(all)) idbItems = all;
   } catch {
     /* fall through with an empty IDB list */
@@ -133,7 +136,7 @@ export async function deleteProject(id: string): Promise<void> {
     /* ignore */
   }
   try {
-    localStorage.removeItem(`sb:project:${id}`);
+    secureWipeStorage(localStorage, `sb:project:${id}`);
     const idx = JSON.parse(localStorage.getItem(META_KEY) ?? "[]") as string[];
     localStorage.setItem(META_KEY, JSON.stringify(idx.filter((x) => x !== id)));
   } catch {

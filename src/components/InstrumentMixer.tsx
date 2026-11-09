@@ -5,7 +5,8 @@ import { useProjectStore } from "@/store/project-store";
 import { INSTRUMENT_GROUPS, INSTRUMENT_DEFS } from "@/data/styles";
 import type { InstrumentSlot } from "@/lib/project-schema";
 import { uid } from "@/lib/project-schema";
-import { Card, Label, SectionTitle, Select, Slider, Badge } from "./ui";
+import { Card, Label, SectionTitle, Select, Badge } from "./ui";
+import { TactileSlider } from "./TactileControls";
 
 export function InstrumentMixer() {
   const project = useProjectStore((s) => s.project);
@@ -82,22 +83,46 @@ export function InstrumentMixer() {
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
               <div>
-                <Label>Loudness — {Math.round(inst.volume * 100)}%</Label>
-                <Slider min={0} max={1} step={0.01} value={inst.volume} aria-label={`${inst.name} loudness`} title="How loud this sound is in the mix"
-                  onChange={(e) => patch(inst.id, (i) => ({ ...i, volume: Number((e.target as HTMLInputElement).value) }))} />
+                <TactileSlider
+                  label="Loudness"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  unit="%"
+                  defaultValue={0.8}
+                  value={inst.volume}
+                  onChange={(v) => patch(inst.id, (i) => ({ ...i, volume: v }))}
+                />
               </div>
               <div>
-                <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <Label>Left–right</Label>
-                  <span className="font-mono text-[11px] text-slate-400" aria-hidden="true">{inst.pan === 0 ? "Center" : inst.pan > 0 ? `Right ${Math.round(inst.pan * 100)}` : `Left ${Math.round(-inst.pan * 100)}`}</span>
-                </div>
-                <Slider min={-1} max={1} step={0.05} value={inst.pan} aria-label={`${inst.name} left-right position, currently ${inst.pan === 0 ? "center" : inst.pan > 0 ? `right ${Math.round(inst.pan * 100)}` : `left ${Math.round(-inst.pan * 100)}`}`} title="Slide left or right to place the sound across your speakers"
-                  onChange={(e) => patch(inst.id, (i) => ({ ...i, pan: Number((e.target as HTMLInputElement).value) }))} />
+                <TactileSlider
+                  label="Left–Right"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  defaultValue={0}
+                  value={inst.pan}
+                  formatValue={(v) =>
+                    v === 0
+                      ? "Center"
+                      : v > 0
+                      ? `Right ${Math.round(v * 100)}`
+                      : `Left ${Math.round(-v * 100)}`
+                  }
+                  onChange={(v) => patch(inst.id, (i) => ({ ...i, pan: v }))}
+                />
               </div>
               <div>
-                <Label>Pitch range — {inst.octave >= 0 ? `+${inst.octave}` : inst.octave}</Label>
-                <Slider min={-2} max={2} step={1} value={inst.octave} aria-label={`${inst.name} pitch range`} title="Shift this sound higher (+) or lower (−)"
-                  onChange={(e) => patch(inst.id, (i) => ({ ...i, octave: Number((e.target as HTMLInputElement).value) }))} />
+                <TactileSlider
+                  label="Pitch Range"
+                  min={-2}
+                  max={2}
+                  step={1}
+                  defaultValue={0}
+                  value={inst.octave}
+                  formatValue={(v) => (v >= 0 ? `+${v}` : `${v}`)}
+                  onChange={(v) => patch(inst.id, (i) => ({ ...i, octave: v }))}
+                />
               </div>
               <div>
                 <Label htmlFor={`role-${inst.id}`}>Job in the song</Label>

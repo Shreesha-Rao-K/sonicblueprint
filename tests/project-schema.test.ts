@@ -86,17 +86,24 @@ test("garbage fails validation", () => {
 
 test("unknown schema versions are rejected (migration contract)", () => {
   const p = createProject("v") as unknown as Record<string, unknown>;
-  ok(validateProject(p), "current v4 validates");
+  ok(validateProject(p), "current v5 validates");
   ok(!validateProject({ ...JSON.parse(JSON.stringify(p)), schemaVersion: 99 }));
+  const asV4 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 4 };
+  delete (asV4 as Record<string, unknown>)["effects"];
+  ok(validateProject(asV4), "v4 without effects still loads");
+  eq(normalizeProject(asV4 as unknown as SonicProject).effects?.reverb.enabled, false);
   const asV3 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 3 };
+  delete (asV3 as Record<string, unknown>)["effects"];
   delete ((asV3 as Record<string, unknown>)["config"] as Record<string, unknown>)["humanize"];
   ok(validateProject(asV3), "v3 without feel still loads");
   eq(normalizeProject(asV3 as unknown as SonicProject).config.humanize, "subtle");
   const asV2 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 2 };
+  delete (asV2 as Record<string, unknown>)["effects"];
   delete (asV2 as Record<string, unknown>)["versions"];
   delete ((asV2 as Record<string, unknown>)["config"] as Record<string, unknown>)["humanize"];
   ok(validateProject(asV2), "v2 without versions still loads");
   const asV1 = { ...JSON.parse(JSON.stringify(p)), schemaVersion: 1 };
+  delete (asV1 as Record<string, unknown>)["effects"];
   delete (asV1 as Record<string, unknown>)["layers"];
   delete (asV1 as Record<string, unknown>)["versions"];
   ok(validateProject(asV1), "v1 without layers still loads");
@@ -210,7 +217,7 @@ test("malformed config, feel and layers never validate", () => {
   ok(!validateProject(mutated((p) => { cfg(p)["timeSignature"] = "7/11"; })), "O bad signature");
   // key/scale
   ok(!validateProject(mutated((p) => { cfg(p)["keyTonic"] = ""; })), "empty key");
-  ok(!validateProject(mutated((p) => { cfg(p)["scale"] = "dorian"; })), "unsupported scale");
+  ok(!validateProject(mutated((p) => { cfg(p)["scale"] = "invalidScale"; })), "unsupported scale");
   // P. malformed layers
   ok(!validateProject(mutated((p) => { (p["layers"] as Record<string, unknown>)["drums"] = "yes"; })), "P string layer flag");
 });

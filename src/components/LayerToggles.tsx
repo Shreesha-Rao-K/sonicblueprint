@@ -7,6 +7,7 @@ import { useProjectStore } from "@/store/project-store";
 import { LAYER_IDS, getLayers, type LayerId } from "@/lib/project-schema";
 import { Card, SectionTitle, Badge } from "./ui";
 import { cn } from "@/lib/cn";
+import { announce } from "@/lib/a11y-announcer";
 
 const LAYER_META: Record<LayerId, { label: string; hint: string }> = {
   chords: { label: "Chords", hint: "Piano, pads, strings, guitar and other chord sounds" },
@@ -43,32 +44,36 @@ export function LayerToggles() {
           const on = layers[id];
           const meta = LAYER_META[id];
           return (
-            <div
+            <button
               key={id}
+              type="button"
+              role="switch"
+              aria-checked={on}
+              aria-label={`${meta.label} layer ${on ? "on" : "off"}`}
+              title={`${meta.label}: ${on ? "included in playback and exports — click to mute" : "muted, settings kept — click to include"}`}
+              onClick={() => {
+                setLayer(id, !on);
+                announce(`${meta.label} layer ${!on ? "enabled" : "muted"}`);
+              }}
               className={cn(
-                "flex items-center gap-3 rounded-xl border p-3 transition-colors",
+                "flex items-center gap-3 rounded-xl border p-3 transition-colors cursor-pointer select-none text-left active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-[var(--border-focus)]",
                 on ? "border-[#2a3a6b] bg-white/[0.02]" : "border-[#1a2340] bg-white/[0.008]"
               )}
             >
-              <button
-                role="switch"
-                aria-checked={on}
-                aria-label={`${meta.label} layer ${on ? "on" : "off"}`}
-                title={`${meta.label}: ${on ? "included in playback and exports — click to mute" : "muted, settings kept — click to include"}`}
-                onClick={() => setLayer(id, !on)}
+              <div
+                aria-hidden="true"
                 className={cn(
-                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors pointer-events-none",
                   on ? "bg-[#6e8bff]" : "bg-[#22305c]"
                 )}
               >
                 <span
-                  aria-hidden="true"
                   className={cn(
                     "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all",
                     on ? "left-[22px]" : "left-0.5"
                   )}
                 />
-              </button>
+              </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[14px] font-bold text-white">{meta.label}</span>
@@ -85,7 +90,7 @@ export function LayerToggles() {
                   {on ? meta.hint : "Muted — excluded from playback & exports"}
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

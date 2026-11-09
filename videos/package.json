@@ -1,0 +1,29 @@
+{
+  "name": "sonicblueprint-videos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "render:all": "tsx scripts/render-all.mts",
+    "stills": "tsx scripts/extract-stills.mts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.541",
+    "@remotion/captions": "^4.0.541",
+    "@remotion/cli": "^4.0.541",
+    "@remotion/player": "^4.0.541",
+    "@remotion/shapes": "^4.0.541",
+    "@remotion/transitions": "^4.0.541",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "^4.0.541"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}

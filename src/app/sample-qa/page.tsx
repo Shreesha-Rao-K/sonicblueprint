@@ -22,7 +22,7 @@ interface Metrics {
   peak: number;
 }
 
-async function renderSample(url: string, midi: number, seconds: number): Promise<AudioBuffer> {
+async function renderSample(url: string, _midi: number, seconds: number): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, Math.ceil(44100 * seconds), 44100);
   const data = await (await fetch(url)).arrayBuffer();
   const buf = await ctx.decodeAudioData(data);

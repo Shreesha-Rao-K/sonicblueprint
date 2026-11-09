@@ -5,6 +5,15 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -30,5 +39,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "qa", "tests"]
+  "exclude": ["node_modules", "qa", "tests", "skills"]
 }

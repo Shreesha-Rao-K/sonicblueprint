@@ -7,17 +7,17 @@ export class PanelErrorBoundary extends React.Component<
   { children: React.ReactNode; label: string },
   { error: Error | null }
 > {
-  state = { error: null as Error | null };
+  override state = { error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
+  override componentDidCatch(error: Error) {
     console.error(`[SonicBlueprint:${this.props.label}]`, error);
   }
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-5" role="alert">

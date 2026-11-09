@@ -69,8 +69,8 @@ function DashboardInner() {
         timeSignature: "4/4", mood: qs.mood, energy: qs.energy, dynamics: 6,
       },
       chords: { progressionId: prog.id, chords, beatsPerChord: 4, octave: 3 },
-      drums: drum,
-      bass: { styleId: qs.bassStyle as never, octave: 1, volume: 0.85 },
+      ...(drum ? { drums: drum } : {}),
+      bass: { styleId: qs.bassStyle, octave: 1, volume: 0.85 },
     });
     await saveProject(p);
     openProject(p);

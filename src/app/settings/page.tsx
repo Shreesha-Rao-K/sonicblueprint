@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Card, SectionTitle, Button, Label } from "@/components/ui";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useTransportStore } from "@/store/project-store";
 import { listProjects, deleteProject } from "@/lib/storage";
 
@@ -28,7 +29,15 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-[800px] space-y-4 p-4 md:p-8">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold"><SettingsIcon aria-hidden="true" className="h-6 w-6 text-[#6e8bff]" /> Settings</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-extrabold"><SettingsIcon aria-hidden="true" className="h-6 w-6 text-[var(--accent-primary)]" /> Settings</h1>
+
+        <Card className="p-5">
+          <SectionTitle>DAW Theme & Visual Styling</SectionTitle>
+          <p className="mb-4 text-[13px] text-[var(--text-secondary)]">
+            Personalize your studio workspace. Choose between high-contrast cyberpunk neon, warm vintage analog console warmth, or clean Swiss mastering slate.
+          </p>
+          <ThemeSwitcher variant="cards" />
+        </Card>
 
         <Card className="p-5">
           <SectionTitle>Sound</SectionTitle>

@@ -13,7 +13,14 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx tests/run.ts",
     "test:audio": "tsx qa/audio-qa.mts",
-    "test:smoke": "tsx qa/smoke.mts"
+    "test:smoke": "tsx qa/smoke.mts",
+    "audit:security": "tsx scripts/security-audit.mts",
+    "check:all": "tsx scripts/guardrails.mts",
+    "video:tts": "tsx videos/scripts/generate-tts.mts",
+    "video:vtt": "tsx videos/scripts/generate-vtt.mts",
+    "video:master": "tsx videos/scripts/master-audio.mts",
+    "video:all": "npm run video:tts && npm run video:vtt && npm run video:master",
+    "prepare": "tsx scripts/setup-git-hooks.mts || true"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
